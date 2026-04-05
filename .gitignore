@@ -1,0 +1,27 @@
+# claude skill
+.agents
+.claude
+skills-lock.json
+
+# secrets
+.env
+
+# pycache
+__pycache__/
+*.pyc
+
+# external repos (cloned separately into workspace, not part of this repo)
+CARE-PD/
+ShinkaEvolve/
+RunPodDocs/
+
+# results (tracked selectively via git — leaderboard.csv is tracked, large model files are not)
+results/care_pd_full/gen_*/
+results/care_pd_local/gen_*/
+care_pd_task/results_smoke/
+care_pd_task/results_validate/
+care_pd_task/results_test/
+care_pd_task/results_test2/
+*.pt
+*.pth
+*.ckpt

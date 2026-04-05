@@ -1,0 +1,198 @@
+# ShinkaEvolve config — CARE-PD UPDRS gait prediction (Phase 1: clinical classification)
+#
+# Local run (smoke / development):
+#   cd ShinkaEvolveCarePD
+#   PYTHONUTF8=1 ShinkaEvolve/.venv/Scripts/shinka_run \
+#     --task-dir care_pd_task \
+#     --results_dir results/care_pd_local \
+#     --num_generations 30 \
+#     --config-fname shinka_task.yaml
+#
+# RunPod (full run — set evo.max_api_costs and num_generations via CLI):
+#   shinka_run --task-dir /workspace/care_pd_task \
+#              --results_dir /workspace/results/care_pd_full \
+#              --num_generations 100 \
+#              --config-fname shinka_task.yaml \
+#              --set evo.max_api_costs=15.0 \
+#              --max-evaluation-jobs 4
+
+# ── Concurrency ────────────────────────────────────────────────────────────────
+# Local laptop: eval takes ~4-8s on CPU, so 2 parallel evals is safe.
+# RunPod GPU: raise to 4-6 via --max-evaluation-jobs on the CLI.
+max_evaluation_jobs: 2
+max_proposal_jobs: 2
+max_db_workers: 4
+verbose: true
+
+# ── Island / archive config ────────────────────────────────────────────────────
+db_config:
+  num_islands: 2
+  archive_size: 60
+  elite_selection_ratio: 0.25
+  num_archive_inspirations: 2
+  num_top_k_inspirations: 1
+  migration_interval: 8
+  migration_rate: 0.1
+  island_elitism: true
+  enforce_island_separation: true
+  parent_selection_strategy: weighted
+  parent_selection_lambda: 10.0
+  archive_selection_strategy: crowding
+  archive_criteria:
+    combined_score: 1.0
+    loc: -0.1
+  enable_dynamic_islands: true
+  stagnation_threshold: 12
+  island_spawn_strategy: best
+  island_spawn_subtree_size: 3
+
+# ── Evolution config ──────────────────────────────────────────────────────────
+evo_config:
+  # Mutation operators
+  patch_types: ["diff", "full", "cross"]
+  patch_type_probs: [0.55, 0.30, 0.15]
+
+  # Budget (override via CLI --num_generations and --set evo.max_api_costs)
+  num_generations: 30
+  max_api_costs: 3.0
+
+  # Quality controls
+  max_patch_resamples: 3
+  max_patch_attempts: 2
+  max_novelty_attempts: 2
+
+  # Execution
+  job_type: local
+  language: python
+
+  # LLM model pool — Gemini + Anthropic (no OpenAI)
+  # Model names must match ShinkaEvolve/shinka/llm/providers/pricing.csv exactly.
+  llm_models:
+    - "claude-opus-4-6"
+    - "claude-sonnet-4-6"
+    - "gemini-2.5-pro"
+    - "gemini-2.5-flash"
+
+  llm_kwargs:
+    temperatures: [0.0, 0.5, 1.0]
+    max_tokens: 32768
+
+  # UCB bandit — adaptive model selection
+  llm_dynamic_selection: ucb1
+  llm_dynamic_selection_kwargs:
+    exploration_coef: 1.0
+    cost_aware_coef: 0.6
+
+  # Meta-recommendations every 8 generations
+  meta_rec_interval: 8
+  meta_llm_models: ["claude-sonnet-4-6"]
+  meta_llm_kwargs:
+    temperatures: [0.0]
+    max_tokens: 16384
+
+  # Novelty gating (cheap model)
+  novelty_llm_models: ["gemini-2.5-flash"]
+  novelty_llm_kwargs:
+    temperatures: [0.0]
+
+  # Embedding for code-similarity deduplication
+  embedding_model: "gemini-embedding-exp-03-07"
+  code_embed_sim_threshold: 0.99
+
+  # Adaptive oversubscription
+  enable_controlled_oversubscription: true
+  proposal_target_mode: adaptive
+  proposal_target_min_samples: 5
+  proposal_target_ratio_cap: 2.0
+  proposal_buffer_max: 2
+  proposal_target_ewma_alpha: 0.3
+
+  # Prompt evolution
+  evolve_prompts: true
+  prompt_evolution_interval: 8
+  prompt_patch_types: ["diff", "full"]
+  prompt_patch_type_probs: [0.5, 0.5]
+  prompt_archive_size: 10
+  prompt_ucb_exploration_constant: 2.0
+  prompt_epsilon: 0.25
+  prompt_percentile_recompute_interval: 5
+
+  # Domain system message
+  task_sys_msg: |
+    You are an expert in clinical gait analysis and deep learning for Parkinson's Disease.
+    You are improving a Python program that classifies UPDRS gait severity (0=normal,
+    1=mild PD, 2=moderate/severe PD) from raw SMPL pose sequences.
+
+    == DATASET ==
+    BMCLab: 23 subjects, 781 walks, UPDRS_GAIT in {0,1,2}, 6-fold subject-level CV.
+    Class distribution: {0: 341, 1: 276, 2: 164} — imbalanced; class 2 (severe) is
+    clinically most important.
+    Fitness: macro-F1 across all folds (higher = better). Baseline: ~0.565.
+
+    == BENCHMARK TARGETS (CARE-PD NeurIPS 2025 paper) ==
+    The paper reports these upper-bound results to aim for:
+    - LOSO within-dataset: best encoder ~0.68 macro-F1 on BMCLab
+    - MIDA (multi-site + in-domain adapt): best encoders 0.74–0.78 on BMCLab
+    Deep learned representations consistently beat handcrafted features on cross-site
+    generalization. The ~0.565 baseline is competitive in-domain but improvable.
+
+    == INPUT FORMAT ==
+    pose: shape (T, 72) float32 SMPL joint rotation parameters.
+    T varies ~210–3015 frames (30–150 fps, ~2–10s walking bouts).
+    72 = 24 SMPL joints × 3 axis-angle rotation components.
+    Joint order: pelvis, left/right hip, spine1, left/right knee, spine2,
+    left/right ankle, spine3, left/right foot, neck, left/right collar,
+    head, left/right shoulder, left/right elbow, left/right wrist,
+    left/right hand (standard SMPL-24).
+
+    == WHAT YOU CAN USE ==
+    Full Python environment with GPU (CUDA) on RunPod. Available packages:
+    - numpy, scipy, sklearn (always available)
+    - torch, torchvision (GPU available — use device='cuda' if available)
+    - Any standard library package
+
+    Pretrained CARE-PD checkpoints are available. The harness passes care_pd_dir
+    (absolute path to the CARE-PD repo root) as a keyword arg to run_evaluation().
+    Use it to locate checkpoints and model code:
+      - care_pd_dir/assets/Pretrained_checkpoints/motionagformer/   (MotionAGFormer)
+      - care_pd_dir/assets/Pretrained_checkpoints/mixste/
+      - care_pd_dir/assets/Pretrained_checkpoints/motionbert/
+      - care_pd_dir/assets/Pretrained_checkpoints/poseformerv2/
+      - care_pd_dir/assets/Pretrained_checkpoints/momask/
+      - care_pd_dir/assets/Pretrained_checkpoints/motionclip/
+      - care_pd_dir/assets/Pretrained_checkpoints/potr/
+    To import CARE-PD model code: sys.path.insert(0, care_pd_dir) then import normally.
+    NOTE: MotionAGFormer/MixSTE/MotionBERT/PoseFormerV2 expect 2D keypoint inputs
+    (h36m format) which are NOT present — do not attempt to load these as-is.
+    MotionCLIP uses 6D SMPL rotations (derivable from pose data).
+    MoMask uses HumanML3D format — also not directly loadable without preprocessing.
+    Safe to use: train a custom neural net on the raw (T,72) pose data directly.
+
+    == PROMISING APPROACHES ==
+    1. Temporal neural nets on raw (T,72) sequences:
+       - 1D-CNN or LSTM/GRU classifier with adaptive pooling (handles variable T)
+       - Transformer encoder with CLS token pooling
+       - TCN (temporal convolutional network)
+       Use class_weight='balanced' equivalent or weighted cross-entropy.
+
+    2. Richer handcrafted + classical ML:
+       - FFT of hip/knee joints → stride frequency features
+       - Angular velocity and acceleration per joint
+       - Left/right limb asymmetry (paired joints)
+       - Gait cycle regularity (autocorrelation of vertical hip oscillation)
+       - Freeze-of-gait proxy (high-frequency power ratio in shank joints)
+       Then GradientBoosting, SVM, or ensemble.
+
+    3. Transfer from SMPL rotations:
+       - Convert axis-angle → 6D rotation repr → use as richer features
+       - Apply SMPL forward kinematics to get 3D joint positions, then extract
+         spatiotemporal gait features from 3D coords
+
+    == CONSTRAINTS ==
+    - run_evaluation(data, folds, care_pd_dir=None) must return dict with:
+        combined_score (float in [0,1]), all_preds, all_labels,
+        per_fold_results, per_class_f1
+    - Predictions must be integers in {0, 1, 2}
+    - Keep per-fold wall-clock runtime reasonable (under 5 min per fold on GPU,
+      under 2 min per fold on CPU)
+    - The EVOLVE-BLOCK is the only mutable region
