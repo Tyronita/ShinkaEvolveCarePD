@@ -202,6 +202,12 @@ if [ "$SMOKE_ONLY" = "true" ]; then
   exit 0
 fi
 
+# ── 6b. Preflight benchmark — all methods scored before evolution starts ──────
+log "=== Step 6b: Preflight benchmark (all methods, fold 0) ==="
+log "Testing RandomForest, GradientBoosting, 1D-CNN, MotionCLIP — results below:"
+python "$TASK_DIR/care_pd_task/preflight.py" --folds 0
+log "=== Preflight complete — starting evolution ==="
+
 # ── 7. Serve ShinkaEvolve docs ───────────────────────────────────────────────
 if [ "$SKIP_DOCS" != "true" ] && [ -d "$SHINKA_DIR/docs" ]; then
   log "=== Step 7: ShinkaEvolve docs on port $DOCS_PORT ==="
