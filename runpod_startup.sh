@@ -102,7 +102,11 @@ log "Installing ShinkaEvolve..."
 uv pip install -e . -q
 
 log "Installing additional deps..."
-uv pip install python-dotenv datasets scikit-learn scipy huggingface_hub -q
+uv pip install python-dotenv datasets scikit-learn scipy huggingface_hub smplx -q
+
+log "Installing PyTorch with CUDA 11.8..."
+uv pip install torch==2.6.0+cu118 torchvision==0.21.0+cu118 \
+  --index-url https://download.pytorch.org/whl/cu118 -q
 
 # ── 3. Apply sys.executable fix to scheduler.py ──────────────────────────────
 log "=== Step 3: Patching scheduler.py ==="
@@ -121,6 +125,19 @@ if grep -q '"python"' "$SCHEDULER" 2>/dev/null; then
 else
   log "scheduler.py already patched (sys.executable found)"
 fi
+
+# ── 3b. GPU health check ─────────────────────────────────────────────────────
+log "=== Step 3b: GPU health check ==="
+python -c "
+import torch
+cuda_ok = torch.cuda.is_available()
+n_gpu   = torch.cuda.device_count() if cuda_ok else 0
+name    = torch.cuda.get_device_name(0) if cuda_ok else 'N/A'
+mem_gb  = (torch.cuda.get_device_properties(0).total_memory / 1e9) if cuda_ok else 0
+print(f'CUDA: {cuda_ok}  GPUs: {n_gpu}  Device: {name}  VRAM: {mem_gb:.1f} GB')
+if not cuda_ok:
+    print('WARNING: No CUDA GPU detected — evolution will run on CPU (much slower)')
+"
 
 # ── 4. Dataset download ──────────────────────────────────────────────────────
 log "=== Step 4: Dataset ==="

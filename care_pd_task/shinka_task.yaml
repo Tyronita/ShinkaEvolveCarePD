@@ -73,7 +73,7 @@ evo_config:
     - "claude-opus-4-6"                                  # Anthropic direct — primary
     - "claude-sonnet-4-6"                                # Anthropic direct — fast
     - "openrouter/google/gemini-2.5-pro-preview"          # OpenRouter — strong reasoner
-    - "openrouter/google/gemini-2.5-flash-preview:thinking" # OpenRouter — fast/cheap
+    - "openrouter/google/gemini-2.5-flash-preview"          # OpenRouter — fast/cheap
     - "openrouter/qwen/qwen3-235b-a22b-2507"              # OpenRouter — diverse, cheap
 
   llm_kwargs:
@@ -94,7 +94,7 @@ evo_config:
     max_tokens: 16384
 
   # Novelty gating (cheap model)
-  novelty_llm_models: ["openrouter/google/gemini-2.5-flash-preview:thinking"]
+  novelty_llm_models: ["openrouter/google/gemini-2.5-flash-preview"]
   novelty_llm_kwargs:
     temperatures: [0.0]
 
@@ -130,72 +130,108 @@ evo_config:
     BMCLab: 23 subjects, 781 walks, UPDRS_GAIT in {0,1,2}, 6-fold subject-level CV.
     Class distribution: {0: 341, 1: 276, 2: 164} — imbalanced; class 2 (severe) is
     clinically most important.
-    Fitness: macro-F1 across all folds (higher = better). Baseline: ~0.565.
-
-    == BENCHMARK TARGETS (CARE-PD NeurIPS 2025 paper) ==
-    The paper reports these upper-bound results to aim for:
-    - LOSO within-dataset: best encoder ~0.68 macro-F1 on BMCLab
-    - MIDA (multi-site + in-domain adapt): best encoders 0.74–0.78 on BMCLab
-    Deep learned representations consistently beat handcrafted features on cross-site
-    generalization. The ~0.565 baseline is competitive in-domain but improvable.
+    Fitness: macro-F1 across all folds (higher = better). Current baseline: MotionCLIP
+    pretrained features + MLP. Target: 0.68+ (LOSO SOTA), 0.74+ (MIDA SOTA).
 
     == INPUT FORMAT ==
-    pose: shape (T, 72) float32 SMPL joint rotation parameters.
-    T varies ~210–3015 frames (30–150 fps, ~2–10s walking bouts).
+    data[subject_id][walk_id]["pose"]: shape (T, 72) float32
+    T varies ~210–3015 frames at 30 fps (~2–10s walking bouts).
     72 = 24 SMPL joints × 3 axis-angle rotation components.
-    Joint order: pelvis, left/right hip, spine1, left/right knee, spine2,
-    left/right ankle, spine3, left/right foot, neck, left/right collar,
-    head, left/right shoulder, left/right elbow, left/right wrist,
-    left/right hand (standard SMPL-24).
+    SMPL-24 joint order: pelvis, L/R hip, spine1, L/R knee, spine2, L/R ankle,
+    spine3, L/R foot, neck, L/R collar, head, L/R shoulder, L/R elbow, L/R wrist,
+    L/R hand.
 
-    == WHAT YOU CAN USE ==
-    Full Python environment with GPU (CUDA) on RunPod. Available packages:
-    - numpy, scipy, sklearn (always available)
-    - torch, torchvision (GPU available — use device='cuda' if available)
-    - Any standard library package
+    == ENVIRONMENT ==
+    GPU available (CUDA). Use DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu").
+    CARE-PD repo is already on sys.path — import directly (no sys.path.insert needed):
 
-    Pretrained CARE-PD checkpoints are available. The harness passes care_pd_dir
-    (absolute path to the CARE-PD repo root) as a keyword arg to run_evaluation().
-    Use it to locate checkpoints and model code:
-      - care_pd_dir/assets/Pretrained_checkpoints/motionagformer/   (MotionAGFormer)
-      - care_pd_dir/assets/Pretrained_checkpoints/mixste/
-      - care_pd_dir/assets/Pretrained_checkpoints/motionbert/
-      - care_pd_dir/assets/Pretrained_checkpoints/poseformerv2/
-      - care_pd_dir/assets/Pretrained_checkpoints/momask/
-      - care_pd_dir/assets/Pretrained_checkpoints/motionclip/
-      - care_pd_dir/assets/Pretrained_checkpoints/potr/
-    To import CARE-PD model code: sys.path.insert(0, care_pd_dir) then import normally.
-    NOTE: MotionAGFormer/MixSTE/MotionBERT/PoseFormerV2 expect 2D keypoint inputs
-    (h36m format) which are NOT present — do not attempt to load these as-is.
-    MotionCLIP uses 6D SMPL rotations (derivable from pose data).
-    MoMask uses HumanML3D format — also not directly loadable without preprocessing.
-    Safe to use: train a custom neural net on the raw (T,72) pose data directly.
+    WORKING IMPORTS (verified importable):
+      from data.preprocessing.preprocessing_utils import (
+          axis_angle_to_matrix,      # (N,3) → (N,3,3) rotation matrices
+          matrix_to_rotation_6d,     # (N,3,3) → (N,6) 6D representation
+          get_6D_rep_from_24x3_pose, # (24,3) → (25,6) per-frame conversion
+      )
+      from model.backbone_loader import load_pretrained_backbone, load_pretrained_weights
+      from model.motionclip.transformer import Encoder_TRANSFORMER
+      from model.motion_encoder import MotionEncoder, ClassifierHead
+      from learning.criterion import FocalLoss, WCELoss
+      from learning.utils import compute_class_weights
+      from data.dataloaders import DataPreprocessor
+      from utility.transforms.skeleton import Skeleton
+      from utility.transforms.quaternion import qrot_np, qbetween_np
 
-    == PROMISING APPROACHES ==
-    1. Temporal neural nets on raw (T,72) sequences:
-       - 1D-CNN or LSTM/GRU classifier with adaptive pooling (handles variable T)
-       - Transformer encoder with CLS token pooling
+    PRETRAINED CHECKPOINTS (care_pd_dir is passed to run_evaluation as kwarg):
+      {care_pd_dir}/assets/Pretrained_checkpoints/motionclip/motionclip_encoder_checkpoint_0100.pth.tar
+      {care_pd_dir}/assets/Pretrained_checkpoints/motionagformer/motionagformer-s-h36m.pth.tr
+      (motionbert, mixste, poseformerv2, momask, potr also available)
+
+    == MOTIONCLIP (HIGHEST PRIORITY — directly usable from our data) ==
+    MotionCLIP was pretrained on diverse human motions. Use it as a frozen or
+    fine-tunable encoder for gait features.
+
+    Input format: (B, 60, 25, 6) — 60 frames, 25 joints (24 SMPL body + global),
+    6D rotation representation (first two rows of rotation matrix, flattened).
+
+    How to convert our data:
+      aa = torch.from_numpy(pose.reshape(-1, 3)).float()   # (T*24, 3)
+      rotmat = axis_angle_to_matrix(aa)                     # (T*24, 3, 3)
+      rot6d  = matrix_to_rotation_6d(rotmat)                # (T*24, 6)
+      rot6d  = rot6d.reshape(T, 24, 6)                      # (T, 24, 6)
+      # pad 25th joint (translation) with zeros → (T, 25, 6)
+      # center-crop or repeat-pad to 60 frames → (1, 60, 25, 6)
+
+    How to load the pretrained encoder:
+      import os
+      from model.backbone_loader import load_pretrained_backbone
+      ckpt = os.path.join(care_pd_dir,
+          "assets/Pretrained_checkpoints/motionclip/motionclip_encoder_checkpoint_0100.pth.tar")
+      encoder = load_pretrained_backbone({"backbone": "motionclip",
+                                          "model_checkpoint_path": ckpt}, "motionclip")
+      encoder = encoder.to(DEVICE).eval()
+      # encoder(x, return_rep=True) → mu of shape (B, 512)
+
+    Strategies with MotionCLIP:
+      A. Frozen features: extract 512-dim mu per walk, train MLP/SVM/XGBoost classifier.
+         Fast, no GPU needed for features. Good starting point.
+      B. Fine-tune encoder: unfreeze last N transformer layers + train full model end-to-end.
+         Needs lower LR (1e-5) for encoder, higher (1e-3) for classifier head.
+      C. Multi-window aggregation: slide a 60-frame window over the full walk,
+         extract features at each window, aggregate (mean/max/attention pooling).
+      D. Temporal MotionCLIP: encode multiple 60-frame windows → sequence of 512-dim
+         vectors → temporal transformer → classify.
+
+    == OTHER PROMISING APPROACHES ==
+    1. Custom temporal nets on 6D rotation sequences (144-dim input, variable T):
+       - 1D-CNN with AdaptiveAvgPool (handles variable T, use GroupNorm not BatchNorm)
+       - Temporal Transformer with CLS token
+       - LSTM/GRU with per-sequence hidden state
        - TCN (temporal convolutional network)
-       Use class_weight='balanced' equivalent or weighted cross-entropy.
+       - Multi-scale CNN (different kernel sizes for stride/tremor frequencies)
 
-    2. Richer handcrafted + classical ML:
-       - FFT of hip/knee joints → stride frequency features
-       - Angular velocity and acceleration per joint
-       - Left/right limb asymmetry (paired joints)
-       - Gait cycle regularity (autocorrelation of vertical hip oscillation)
-       - Freeze-of-gait proxy (high-frequency power ratio in shank joints)
-       Then GradientBoosting, SVM, or ensemble.
+    2. Physics-informed gait features:
+       - Axis-angle velocity/acceleration per joint (diff along T axis)
+       - Left/right limb asymmetry (paired joint rotation differences)
+       - Stride frequency from FFT of hip/knee vertical oscillation
+       - Freeze-of-gait proxy: high-frequency power ratio in ankle joints
+       - Gait regularity: autocorrelation of pelvis rotation
+       Convert to 3D positions first: axis_angle → matrix → skeleton FK
 
-    3. Transfer from SMPL rotations:
-       - Convert axis-angle → 6D rotation repr → use as richer features
-       - Apply SMPL forward kinematics to get 3D joint positions, then extract
-         spatiotemporal gait features from 3D coords
+    3. Fine-tuning MotionAGFormer/MotionBERT for SMPL input:
+       These expect H36M 17-joint 3D positions. You can derive approximate 3D positions
+       from SMPL axis-angle using the SMPL kinematic chain and joint offsets:
+         from utility.transforms.skeleton import Skeleton
+         # Skeleton forward_kinematics(quat_params, root_pos) → 3D joint positions
+       Then select 17 joints matching H36M indices and fine-tune the pretrained backbone.
+
+    4. Loss improvements (import from learning.criterion):
+       - FocalLoss: better for class imbalance than CrossEntropyLoss
+       - WCELoss: class-weighted CE with configurable weights
+       from learning.criterion import FocalLoss, WCELoss
 
     == CONSTRAINTS ==
     - run_evaluation(data, folds, care_pd_dir=None) must return dict with:
         combined_score (float in [0,1]), all_preds, all_labels,
         per_fold_results, per_class_f1
     - Predictions must be integers in {0, 1, 2}
-    - Keep per-fold wall-clock runtime reasonable (under 5 min per fold on GPU,
-      under 2 min per fold on CPU)
-    - The EVOLVE-BLOCK is the only mutable region
+    - Per-fold wall-clock: <5 min on GPU, <2 min on CPU
+    - EVOLVE-BLOCK is the only mutable region
