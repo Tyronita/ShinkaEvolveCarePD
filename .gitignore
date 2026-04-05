@@ -24,4 +24,4 @@ care_pd_task/results_test/
 care_pd_task/results_test2/
 *.pt
 *.pth
-*.ckpt
+*.ckptdocs/
