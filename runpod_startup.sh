@@ -31,12 +31,14 @@ set -euo pipefail
 # RunPod injects secrets as RUNPOD_SECRET_<NAME>. The UI lets you map them to
 # plain names, but if that step was skipped this block handles it automatically.
 : "${ANTHROPIC_API_KEY:=${RUNPOD_SECRET_ANTHROPIC_API_KEY:-}}"
-: "${GEMINI_API_KEY:=${RUNPOD_SECRET_GEMINI_API_KEY:-}}"
+: "${GEMINI_API_KEY:=${RUNPOD_SECRET_GEMINI_API_KEY:-}}"      # embeddings only
+: "${OPENROUTER_API_KEY:=${RUNPOD_SECRET_OPENROUTER_API_KEY:-}}"
+: "${AZURE_API_KEY:=${RUNPOD_SECRET_AZURE_API_KEY:-}}"
 : "${HF_TOKEN:=${RUNPOD_SECRET_HF_TOKEN:-}}"
 : "${GITHUB_TOKEN:=${RUNPOD_SECRET_GITHUB_TOKEN:-}}"
 : "${GITHUB_EMAIL:=${RUNPOD_SECRET_GITHUB_EMAIL:-}}"
-# GITHUB_REPO is plain config (not a secret) — set it directly as a pod env var
-# e.g. GITHUB_REPO=Tyronita/ShinkaEvolveCarePD
+# Plain pod env vars (not secrets):
+# GITHUB_REPO, AZURE_API_ENDPOINT, AZURE_API_VERSION, NUM_GENERATIONS, etc.
 
 # ── Config from env (with defaults) ─────────────────────────────────────────
 WORKSPACE="${WORKSPACE:-/workspace}"
@@ -146,6 +148,7 @@ log "=== Step 5: Writing .env ==="
 cat > "$TASK_DIR/.env" << EOF
 ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
 GEMINI_API_KEY=${GEMINI_API_KEY:-}
+OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
 HF_TOKEN=${HF_TOKEN:-}
 GITHUB_TOKEN=${GITHUB_TOKEN:-}
 EOF
@@ -191,9 +194,7 @@ log "=== Step 8: ShinkaEvolve Web UI on port $WEBUI_PORT ==="
 mkdir -p "$RESULTS_DIR"
 
 # Run in background; SSH tunnel to access: ssh -L 8080:localhost:8080 <pod>
-shinka_visualize \
-  --results_dir "$RESULTS_DIR" \
-  --port "$WEBUI_PORT" &
+shinka_visualize "$RESULTS_DIR" --port "$WEBUI_PORT" &
 WEBUI_PID=$!
 log "Web UI PID=$WEBUI_PID — http://localhost:$WEBUI_PORT"
 log "  SSH tunnel: ssh -L $WEBUI_PORT:localhost:$WEBUI_PORT root@<pod-ip> -p <port> -i <key>"

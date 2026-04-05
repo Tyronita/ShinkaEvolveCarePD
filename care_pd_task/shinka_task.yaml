@@ -65,13 +65,16 @@ evo_config:
   job_type: local
   language: python
 
-  # LLM model pool — Gemini + Anthropic (no OpenAI)
-  # Model names must match ShinkaEvolve/shinka/llm/providers/pricing.csv exactly.
+  # LLM model pool
+  # Anthropic: direct API, cost-tracked in max_api_costs
+  # OpenRouter: use openrouter/ prefix — costs NOT tracked (N/A in pricing.csv)
+  # Gemini: direct API used for embeddings only (see embedding_model below)
   llm_models:
-    - "claude-opus-4-6"
-    - "claude-sonnet-4-6"
-    - "gemini-2.5-pro"
-    - "gemini-2.5-flash"
+    - "claude-opus-4-6"                                  # Anthropic direct — primary
+    - "claude-sonnet-4-6"                                # Anthropic direct — fast
+    - "openrouter/google/gemini-2.5-pro-preview"         # OpenRouter — strong reasoner
+    - "openrouter/google/gemini-flash-2.5"               # OpenRouter — fast/cheap
+    - "openrouter/qwen/qwen3-235b-a22b-2507"             # OpenRouter — diverse, cheap
 
   llm_kwargs:
     temperatures: [0.0, 0.5, 1.0]
@@ -91,7 +94,7 @@ evo_config:
     max_tokens: 16384
 
   # Novelty gating (cheap model)
-  novelty_llm_models: ["gemini-2.5-flash"]
+  novelty_llm_models: ["openrouter/google/gemini-flash-2.5"]
   novelty_llm_kwargs:
     temperatures: [0.0]
 
