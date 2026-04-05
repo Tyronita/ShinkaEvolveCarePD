@@ -298,7 +298,11 @@ def cmd_deploy(gpu_type: str = "NVIDIA RTX A5000", gpu_count: int = 1):
         {"key": "SMOKE_ONLY",         "value": "false"},
     ]
 
-    startup_cmd = "bash /workspace/ShinkaEvolveCarePD/runpod_startup.sh 2>&1 | tee /root/startup.log"
+    startup_cmd = (
+        f"git clone https://{GITHUB_TOKEN}@github.com/{GITHUB_REPO}.git "
+        f"/workspace/ShinkaEvolveCarePD && "
+        f"bash /workspace/ShinkaEvolveCarePD/runpod_startup.sh 2>&1 | tee /root/startup.log"
+    )
 
     mutation = """
     mutation DeployPod($input: PodFindAndDeployOnDemandInput!) {
@@ -313,7 +317,7 @@ def cmd_deploy(gpu_type: str = "NVIDIA RTX A5000", gpu_count: int = 1):
         "gpuCount": gpu_count,
         "gpuTypeId": gpu_type,
         "name": POD_NAME,
-        "imageName": "runpod/pytorch:2.1.1-py3.10-cuda11.8.0-devel-ubuntu22.04",
+        "imageName": "runpod/pytorch:2.1.0-py3.10-cuda11.8.0-devel-ubuntu22.04",
         "dockerArgs": startup_cmd,
         "ports": "22/tcp,8080/http,8888/http",
         "volumeInGb": 50,
