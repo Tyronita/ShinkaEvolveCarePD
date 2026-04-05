@@ -102,7 +102,7 @@ log "Installing ShinkaEvolve..."
 uv pip install -e . -q
 
 log "Installing additional deps..."
-uv pip install python-dotenv datasets scikit-learn scipy -q
+uv pip install python-dotenv datasets scikit-learn scipy huggingface_hub -q
 
 # ── 3. Apply sys.executable fix to scheduler.py ──────────────────────────────
 log "=== Step 3: Patching scheduler.py ==="
@@ -133,10 +133,17 @@ if [ ! -f "$DATASET_PKL" ]; then
   fi
   log "Downloading CARE-PD dataset from HuggingFace..."
   mkdir -p "$CARE_PD_DIR/assets/datasets"
-  huggingface-cli download vida-adl/CARE-PD \
-    --repo-type dataset \
-    --local-dir "$CARE_PD_DIR/assets/datasets" \
-    --token "$HF_TOKEN"
+  python -c "
+from huggingface_hub import snapshot_download
+snapshot_download(
+    repo_id='vida-adl/CARE-PD',
+    repo_type='dataset',
+    local_dir='$CARE_PD_DIR/assets/datasets',
+    token='$HF_TOKEN',
+    ignore_patterns=['*.git*'],
+)
+print('Download complete')
+"
   log "Dataset downloaded"
 else
   log "Dataset already present: $DATASET_PKL"
