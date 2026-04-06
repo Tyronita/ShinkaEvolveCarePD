@@ -298,11 +298,27 @@ def cmd_deploy(gpu_type: str = "NVIDIA RTX A5000", gpu_count: int = 1):
         {"key": "SMOKE_ONLY",         "value": "false"},
     ]
 
-    startup_cmd = (
-        f"git clone https://{GITHUB_TOKEN}@github.com/{GITHUB_REPO}.git "
-        f"/workspace/ShinkaEvolveCarePD && "
-        f"bash /workspace/ShinkaEvolveCarePD/runpod_startup.sh 2>&1 | tee /root/startup.log"
+    IMAGE = "runpod/pytorch:2.1.0-py3.10-cuda11.8.0-devel-ubuntu22.04"
+
+    # Build a dockerArgs string with NO shell operators (they get tokenized).
+    # Strategy: base64-encode a Python bootstrap script, then run it via:
+    #   python3 -c exec(__import__('base64').b64decode('BASE64').decode())
+    # Tokenizes to exactly 3 args: ["python3", "-c", "exec(...)"] — no spaces
+    # in the exec(...) string, so no further splitting occurs.
+    import base64 as _b64
+    _bootstrap = (
+        "import os,subprocess\n"
+        "t=os.environ.get('GITHUB_TOKEN','')\n"
+        "r='Tyronita/ShinkaEvolveCarePD'\n"
+        "d='/workspace/ShinkaEvolveCarePD'\n"
+        "u=f'https://{t}@github.com/{r}.git' if t else f'https://github.com/{r}.git'\n"
+        "subprocess.run(['git','clone',u,d] if not os.path.exists(d+'/.git') else ['git','-C',d,'pull','--ff-only'],check=False)\n"
+        "os.execv('/bin/bash',['/bin/bash',d+'/runpod_startup.sh'])\n"
     )
+    _enc = _b64.b64encode(_bootstrap.encode()).decode()
+    # No quotes in the -c code — shell strips single quotes causing NameError.
+    # Pass base64 payload as sys.argv[1] instead; the -c code has zero quotes.
+    STARTUP_CMD = f"python3 -c import sys,base64;exec(base64.b64decode(sys.argv[1])) {_enc}"
 
     mutation = """
     mutation DeployPod($input: PodFindAndDeployOnDemandInput!) {
@@ -317,8 +333,8 @@ def cmd_deploy(gpu_type: str = "NVIDIA RTX A5000", gpu_count: int = 1):
         "gpuCount": gpu_count,
         "gpuTypeId": gpu_type,
         "name": POD_NAME,
-        "imageName": "runpod/pytorch:2.1.0-py3.10-cuda11.8.0-devel-ubuntu22.04",
-        "dockerArgs": startup_cmd,
+        "imageName": IMAGE,
+        "dockerArgs": STARTUP_CMD,
         "ports": "22/tcp,8080/http,8888/http",
         "volumeInGb": 50,
         "containerDiskInGb": 50,
@@ -330,17 +346,86 @@ def cmd_deploy(gpu_type: str = "NVIDIA RTX A5000", gpu_count: int = 1):
     }}
 
     print(f"Deploying pod '{POD_NAME}' on {gpu_type} x{gpu_count}...")
-    print(f"  Image: runpod/pytorch:2.1.1-py3.10-cuda11.8.0-devel-ubuntu22.04")
-    print(f"  Startup: {startup_cmd[:60]}...")
-    print(f"  Env vars: {len(env_vars)} set\n")
+    print(f"  Image:   {IMAGE}")
+    print(f"  Startup: {STARTUP_CMD}")
+    print(f"  Env vars: {len(env_vars)} set")
+    print(f"  Logs visible in RunPod dashboard -> pod logs\n")
 
     result = gql(mutation, variables)
     pod = result.get("podFindAndDeployOnDemand", {})
     print(f"Deployed! Pod ID: {pod.get('id')}")
     print(f"Status: {pod.get('desiredStatus')}")
-    print(f"\nWaiting for SSH to become available...")
-    time.sleep(15)
+    print(f"\nRun: python runpod_manager.py logs   (to stream logs)")
     cmd_status()
+
+
+def cmd_bootstrap():
+    """
+    Wait for SSH then run the full startup sequence on the pod.
+    Clones the repo and runs runpod_startup.sh inside a nohup session
+    so it keeps running after this script exits.
+    """
+    print("Waiting for pod SSH...")
+    pod = None
+    ssh = None
+    for _ in range(40):
+        pod = get_pod()
+        if pod:
+            ssh = get_ssh_info(pod)
+        if ssh:
+            break
+        time.sleep(15)
+        print("  still waiting...")
+
+    if not ssh:
+        print("SSH never became available.")
+        return
+
+    ip, port = ssh
+    print(f"\nSSH available at {ip}:{port}")
+
+    # Test SSH
+    for attempt in range(10):
+        r = subprocess.run(
+            ["ssh", "-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=10",
+             "-p", str(port), f"root@{ip}", "echo SSH_OK"],
+            capture_output=True, text=True, timeout=15)
+        if "SSH_OK" in r.stdout:
+            break
+        print(f"  SSH not ready yet ({attempt+1}/10)...")
+        time.sleep(10)
+    else:
+        print("SSH refused all attempts.")
+        return
+
+    print("SSH confirmed. Running bootstrap...\n")
+
+    # Write bootstrap script to pod then run in nohup
+    bootstrap = (
+        f"#!/bin/bash\n"
+        f"set -x\n"
+        f"git clone https://{GITHUB_TOKEN}@github.com/{GITHUB_REPO}.git /workspace/ShinkaEvolveCarePD 2>&1\n"
+        f"bash /workspace/ShinkaEvolveCarePD/runpod_startup.sh 2>&1\n"
+    )
+
+    # Write the script via SSH heredoc, then run it with nohup
+    write_cmd = f"cat > /root/bootstrap.sh << 'ENDOFSCRIPT'\n{bootstrap}\nENDOFSCRIPT\nchmod +x /root/bootstrap.sh"
+    subprocess.run(
+        ["ssh", "-o", "StrictHostKeyChecking=no",
+         "-p", str(port), f"root@{ip}", write_cmd],
+        text=True, timeout=30)
+
+    # Launch with nohup so it survives disconnect, tee to log
+    launch = "nohup bash /root/bootstrap.sh > /root/startup.log 2>&1 &\necho Bootstrap PID: $!"
+    r = subprocess.run(
+        ["ssh", "-o", "StrictHostKeyChecking=no",
+         "-p", str(port), f"root@{ip}", launch],
+        capture_output=True, text=True, timeout=15)
+    print(r.stdout)
+
+    print("\nBootstrap launched in background.")
+    print(f"Monitor with: python runpod_manager.py logs --follow")
+    print(f"Or SSH in:    ssh -p {port} root@{ip}")
 
 
 def cmd_stop():
@@ -393,8 +478,9 @@ def main():
                           help="GPU type ID (default: NVIDIA RTX A5000)")
     p_deploy.add_argument("--count", type=int, default=1)
 
-    sub.add_parser("stop",      help="Stop the pod")
-    sub.add_parser("terminate", help="Terminate (delete) the pod")
+    sub.add_parser("bootstrap",  help="SSH in and run startup script (after deploy)")
+    sub.add_parser("stop",       help="Stop the pod")
+    sub.add_parser("terminate",  help="Terminate (delete) the pod")
 
     p_ssh = sub.add_parser("ssh", help="Run a shell command on the pod")
     p_ssh.add_argument("command", nargs=argparse.REMAINDER)
@@ -415,6 +501,8 @@ def main():
         cmd_leaderboard()
     elif args.cmd == "deploy":
         cmd_deploy(gpu_type=args.gpu, gpu_count=args.count)
+    elif args.cmd == "bootstrap":
+        cmd_bootstrap()
     elif args.cmd == "stop":
         cmd_stop()
     elif args.cmd == "terminate":

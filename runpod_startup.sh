@@ -27,6 +27,14 @@
 
 set -euo pipefail
 
+# ── 0. Start sshd so pod is reachable for monitoring ─────────────────────────
+# This script runs as the container's main process (dockerArgs). Start sshd in
+# background first so SSH access works throughout the run.
+if [ -f /usr/sbin/sshd ]; then
+  /usr/sbin/sshd -D &
+  echo "[startup] sshd started (PID $!)"
+fi
+
 # ── Map RUNPOD_SECRET_* → plain env vars (fallback if UI mapping wasn't set) ─
 # RunPod injects secrets as RUNPOD_SECRET_<NAME>. The UI lets you map them to
 # plain names, but if that step was skipped this block handles it automatically.
