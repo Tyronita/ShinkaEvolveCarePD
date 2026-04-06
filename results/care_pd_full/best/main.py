@@ -87,16 +87,26 @@ def smpl_to_6d(pose: np.ndarray) -> np.ndarray:
 def get_sliding_windows(seq: np.ndarray, window_size: int = 60, step: int = 30) -> np.ndarray:
     """
     Generate sliding windows from sequence with specified step size.
+
+    Args:
+        seq: (T, ...) input sequence
+        window_size: size of each window
+        step: step size between windows (50% overlap if step=30)
+
+    Returns:
+        (N, window_size, ...) array of windows
     """
     T = len(seq)
     if T <= window_size:
+        # If sequence is too short, repeat-pad it first
         reps = (window_size + T - 1) // T
         seq = np.tile(seq, (reps,) + (1,) * (seq.ndim - 1))
         T = len(seq)
 
+    # Generate starting indices for windows
     starts = np.arange(0, T - window_size + 1, step)
     if len(starts) == 0:
-        starts = np.array([0])
+        starts = np.array([0])  # Ensure at least one window
 
     windows = np.array([seq[s:s + window_size] for s in starts])
     return windows
@@ -105,186 +115,100 @@ def get_sliding_windows(seq: np.ndarray, window_size: int = 60, step: int = 30) 
 def extract_gait_features(pose: np.ndarray) -> np.ndarray:
     """
     Extract comprehensive handcrafted gait features from SMPL pose sequence.
-    Designed specifically for PD severity classification.
-
-    Features cover:
-    - Global rotation statistics (mean, std, range)
-    - Velocity and acceleration (PD = reduced movement speed)
-    - Left-right asymmetry (PD = asymmetric gait)
-    - Stride frequency and rhythm (PD = shuffling, reduced cadence)
-    - Gait regularity via autocorrelation
-    - Freeze-of-gait proxy (high-frequency power ratio)
-    - Per-joint velocity statistics for key gait joints
+    Returns a 1D feature vector capturing PD-relevant gait characteristics.
     """
     T = len(pose)
     rot6d = smpl_to_6d(pose)  # (T, 25, 6)
-    flat = rot6d[:, :24, :].reshape(T, -1)  # (T, 144) - exclude translation slot
+    flat = rot6d.reshape(T, -1)  # (T, 150)
 
-    # ── 1. Global statistics ──────────────────────────────────────────────
-    mean_feat = flat.mean(0)          # (144,)
-    std_feat = flat.std(0)            # (144,)
-    range_feat = flat.max(0) - flat.min(0)  # (144,)
+    features = []
 
-    # ── 2. Velocity and acceleration ──────────────────────────────────────
-    vel = np.diff(flat, axis=0)       # (T-1, 144)
-    acc = np.diff(vel, axis=0)        # (T-2, 144)
-    vel_mean = vel.mean(0)            # (144,)
-    vel_std = vel.std(0)              # (144,) - important: PD has reduced velocity variance
-    vel_max = np.abs(vel).max(0)      # (144,)
-    acc_std = acc.std(0)              # (144,)
+    # 1. Global rotation statistics per joint (mean, std, percentiles)
+    features.append(flat.mean(0))       # (150,)
+    features.append(flat.std(0))        # (150,)
+    features.append(np.percentile(flat, 25, axis=0))  # (150,)
+    features.append(np.percentile(flat, 75, axis=0))  # (150,)
 
-    # ── 3. Key joint velocity statistics ─────────────────────────────────
-    # SMPL joints: pelvis=0, L_hip=1, R_hip=2, spine1=3, L_knee=4, R_knee=5
-    #              L_ankle=7, R_ankle=8, L_foot=10, R_foot=11
-    key_joints = [0, 1, 2, 4, 5, 7, 8, 10, 11]  # gait-relevant joints
-    joint_vel = np.diff(rot6d[:, :24, :], axis=0)  # (T-1, 24, 6)
-    kj_vel_mean = np.abs(joint_vel[:, key_joints, :]).mean(axis=0).flatten()  # (54,)
-    kj_vel_std = joint_vel[:, key_joints, :].std(axis=0).flatten()  # (54,)
+    # 2. Velocity (1st derivative) statistics
+    vel = np.diff(flat, axis=0)  # (T-1, 150)
+    features.append(vel.mean(0))
+    features.append(vel.std(0))
+    features.append(np.abs(vel).mean(0))  # mean absolute velocity
 
-    # ── 4. Left-right asymmetry ───────────────────────────────────────────
-    # Larger asymmetry → more severe PD
-    asym_hip = rot6d[:, 1, :] - rot6d[:, 2, :]       # (T, 6)
-    asym_knee = rot6d[:, 4, :] - rot6d[:, 5, :]      # (T, 6)
-    asym_ankle = rot6d[:, 7, :] - rot6d[:, 8, :]     # (T, 6)
-    asym_foot = rot6d[:, 10, :] - rot6d[:, 11, :]    # (T, 6)
+    # 3. Acceleration (2nd derivative) statistics
+    if T > 2:
+        acc = np.diff(vel, axis=0)  # (T-2, 150)
+        features.append(acc.mean(0))
+        features.append(acc.std(0))
+        features.append(np.abs(acc).mean(0))  # jerkiness proxy
+    else:
+        features.extend([np.zeros(150)] * 3)
 
-    asym_features = np.concatenate([
-        asym_hip.mean(0), asym_hip.std(0),
-        asym_knee.mean(0), asym_knee.std(0),
-        asym_ankle.mean(0), asym_ankle.std(0),
-        asym_foot.mean(0), asym_foot.std(0),
-    ])  # (48,)
+    # 4. Left-right asymmetry (KEY for PD — affected side shows reduced motion)
+    lr_pairs = [(1, 2), (4, 5), (7, 8), (10, 11), (16, 17), (18, 19), (20, 21)]
+    for l_idx, r_idx in lr_pairs:
+        diff = rot6d[:, l_idx, :] - rot6d[:, r_idx, :]  # (T, 6)
+        features.append(diff.mean(0))   # (6,) mean asymmetry
+        features.append(diff.std(0))    # (6,) variability of asymmetry
+        features.append(np.abs(diff).mean(0))  # (6,) magnitude
 
-    # ── 5. Frequency domain features ─────────────────────────────────────
-    # Stride frequency from pelvis vertical oscillation
-    pelvis_signal = rot6d[:, 0, :]  # (T, 6) all pelvis 6D components
-    fft_features = []
-    freqs = np.fft.rfftfreq(T, d=1.0/30)  # 30 fps
+    # 5. Joint range of motion (ROM) — reduced in PD
+    for j in [0, 1, 2, 4, 5, 7, 8, 12, 16, 17, 18, 19]:
+        joint_data = rot6d[:, j, :]
+        rom = joint_data.max(0) - joint_data.min(0)  # (6,)
+        features.append(rom)
 
-    for ch in range(6):  # all 6 pelvis components
-        sig = pelvis_signal[:, ch]
-        sig = sig - sig.mean()
-        fft_mag = np.abs(np.fft.rfft(sig))
+    # 6. Stride frequency via FFT on lower body joints
+    for j in [0, 1, 2, 7, 8]:  # pelvis, hips, ankles
+        for comp in range(min(3, 6)):  # first 3 components
+            signal = rot6d[:, j, comp]
+            signal = signal - signal.mean()
+            if T > 10:
+                fft_mag = np.abs(np.fft.rfft(signal))
+                freqs = np.fft.rfftfreq(T, d=1.0/30)
+                gait_mask = (freqs >= 0.5) & (freqs <= 3.0)
+                if gait_mask.any():
+                    gait_fft = fft_mag[gait_mask]
+                    gait_freqs = freqs[gait_mask]
+                    dom_freq = gait_freqs[np.argmax(gait_fft)]
+                    dom_power = gait_fft.max()
+                    total_power = fft_mag[1:].sum() + 1e-8
+                    gait_power_ratio = gait_fft.sum() / total_power
+                    features.append(np.array([dom_freq, dom_power, gait_power_ratio]))
+                else:
+                    features.append(np.zeros(3))
+            else:
+                features.append(np.zeros(3))
 
-        gait_mask = (freqs >= 0.5) & (freqs <= 3.0)
-        hf_mask = freqs > 3.0
-        total_power = fft_mag.sum() + 1e-8
+    # 7. Gait regularity via autocorrelation of pelvis
+    pelvis_signal = rot6d[:, 0, 0]
+    pelvis_signal = pelvis_signal - pelvis_signal.mean()
+    if T > 30:
+        ac = np.correlate(pelvis_signal, pelvis_signal, mode='full')
+        ac = ac[T-1:] / (ac[T-1] + 1e-8)
+        n_lags = min(60, len(ac))
+        features.append(ac[:n_lags])
+        if n_lags < 60:
+            features.append(np.zeros(60 - n_lags))
+    else:
+        features.append(np.zeros(60))
 
-        if gait_mask.any():
-            dominant_freq = freqs[gait_mask][np.argmax(fft_mag[gait_mask])]
-            gait_power = fft_mag[gait_mask].sum()
+    # 8. Freeze-of-gait proxy: high-freq power ratio for ankles
+    for j in [7, 8]:
+        signal = rot6d[:, j, 0] - rot6d[:, j, 0].mean()
+        if T > 10:
+            fft_mag = np.abs(np.fft.rfft(signal))
+            freqs = np.fft.rfftfreq(T, d=1.0/30)
+            hf = fft_mag[freqs > 3.0].sum()
+            lf = fft_mag[(freqs >= 0.5) & (freqs <= 3.0)].sum() + 1e-8
+            features.append(np.array([hf / lf]))
         else:
-            dominant_freq = 0.0
-            gait_power = 0.0
+            features.append(np.zeros(1))
 
-        hf_power = fft_mag[hf_mask].sum() if hf_mask.any() else 0.0
+    # 9. Sequence length (normalized) — PD patients may have shorter walks
+    features.append(np.array([T / 30.0, np.log1p(T)]))
 
-        fft_features.extend([dominant_freq, gait_power / total_power, hf_power / total_power])
-
-    fft_features = np.array(fft_features)  # (18,)
-
-    # ── 6. Ankle frequency features (freeze-of-gait proxy) ───────────────
-    ankle_features = []
-    for joint_idx in [7, 8]:  # L_ankle, R_ankle
-        for ch in range(3):  # first 3 components
-            sig = rot6d[:, joint_idx, ch] - rot6d[:, joint_idx, ch].mean()
-            fft_mag = np.abs(np.fft.rfft(sig))
-            lf_mask = (freqs >= 0.5) & (freqs <= 3.0)
-            hf_mask = freqs > 3.0
-            lf_power = fft_mag[lf_mask].sum() + 1e-8
-            hf_power = fft_mag[hf_mask].sum() if hf_mask.any() else 0.0
-            fog_ratio = hf_power / lf_power
-            ankle_features.append(fog_ratio)
-
-    ankle_features = np.array(ankle_features)  # (6,)
-
-    # ── 7. Gait regularity: autocorrelation of pelvis rotation ───────────
-    pelvis_ac = rot6d[:, 0, 0] - rot6d[:, 0, 0].mean()
-    ac = np.correlate(pelvis_ac, pelvis_ac, mode='full')
-    ac = ac[T-1:] / (ac[T-1] + 1e-8)
-    max_lag = min(60, len(ac))
-    ac_trunc = ac[1:max_lag]
-    # Find first local maximum (stride period)
-    regularity_features = np.array([
-        ac_trunc.max(),                    # peak autocorrelation (regularity)
-        ac_trunc.mean(),                   # mean autocorrelation
-        np.argmax(ac_trunc) / 30.0,       # stride period estimate (seconds)
-    ])  # (3,)
-
-    # ── 8. Walk duration and sequence-level features ──────────────────────
-    walk_features = np.array([
-        T / 30.0,                          # walk duration (seconds)
-        np.abs(vel).mean(),                # mean absolute velocity (all joints)
-        vel_std.mean(),                    # mean velocity std
-        acc_std.mean(),                    # mean acceleration std
-    ])  # (4,)
-
-    return np.concatenate([
-        mean_feat, std_feat, range_feat,
-        vel_mean, vel_std, vel_max,
-        acc_std,
-        kj_vel_mean, kj_vel_std,
-        asym_features,
-        fft_features,
-        ankle_features,
-        regularity_features,
-        walk_features,
-    ]).astype(np.float32)
-
-
-# ── Sklearn ensemble classifier ─────────────────────────────────────────────
-
-def train_sklearn_ensemble(X_train: np.ndarray, y_train: np.ndarray,
-                           X_test: np.ndarray) -> np.ndarray:
-    """
-    Train a sklearn ensemble on handcrafted features.
-    Uses RandomForest + GradientBoosting with class weighting.
-    This is the primary classifier for the handcrafted feature path.
-    """
-    from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier, VotingClassifier
-    from sklearn.preprocessing import StandardScaler
-    from sklearn.pipeline import Pipeline
-
-    # Handle NaN/Inf in features
-    X_train = np.nan_to_num(X_train, nan=0.0, posinf=0.0, neginf=0.0)
-    X_test = np.nan_to_num(X_test, nan=0.0, posinf=0.0, neginf=0.0)
-
-    n_cls = 3
-    counts = np.bincount(y_train, minlength=n_cls).astype(float)
-    counts = np.where(counts == 0, 1.0, counts)
-    class_weight = {i: counts.sum() / (n_cls * counts[i]) for i in range(n_cls)}
-
-    rf = Pipeline([
-        ('scaler', StandardScaler()),
-        ('clf', RandomForestClassifier(
-            n_estimators=300,
-            max_depth=None,
-            min_samples_leaf=2,
-            class_weight=class_weight,
-            random_state=42,
-            n_jobs=-1,
-        ))
-    ])
-
-    gb = Pipeline([
-        ('scaler', StandardScaler()),
-        ('clf', GradientBoostingClassifier(
-            n_estimators=200,
-            max_depth=4,
-            learning_rate=0.05,
-            subsample=0.8,
-            random_state=42,
-        ))
-    ])
-
-    # Soft voting ensemble
-    ensemble = VotingClassifier(
-        estimators=[('rf', rf), ('gb', gb)],
-        voting='soft',
-    )
-
-    ensemble.fit(X_train, y_train)
-    return ensemble.predict(X_test)
+    return np.concatenate([f.ravel() for f in features])
 
 
 # ── MotionCLIP encoder ──────────────────────────────────────────────────────
@@ -406,16 +330,7 @@ def load_motionclip(care_pd_dir: str) -> nn.Module:
 #          Try alpha=0.25/0.5, gamma=1.0/2.0/5.0. Or switch to WCE:
 #          nn.CrossEntropyLoss(weight=class_weights_tensor)
 
-class FocalLoss(nn.Module):
-    def __init__(self, alpha: torch.Tensor, gamma: float = 2.0):
-        super().__init__()
-        self.alpha = alpha  # (3,) tensor of per-class weights
-        self.gamma = gamma
-
-    def forward(self, logits: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
-        ce = nn.functional.cross_entropy(logits, targets, reduction='none', weight=self.alpha)
-        pt = torch.exp(-ce)
-        return ((1 - pt) ** self.gamma * ce).mean()
+# Remove FocalLoss - now using sklearn with class_weight='balanced'
 
 
 # ── Feature extraction ───────────────────────────────────────────────────────
@@ -424,53 +339,108 @@ class FocalLoss(nn.Module):
 def extract_motionclip_features(encoder: nn.Module, poses: list) -> np.ndarray:
     """
     Extract MotionCLIP embeddings using multi-window mean pooling.
+
+    Strategy: slide 60-frame windows across each walk → extract per-window features
+              → mean-pool across windows → 512-dim walk-level embedding.
+
+    Uses simple mean pooling instead of untrainable attention pooling.
+
+    Args:
+        encoder: frozen MotionCLIPEncoder on DEVICE
+        poses: list of (T_i, 72) float32 arrays
+    Returns:
+        (N, 512) numpy feature matrix
     """
     embs = []
     for pose in poses:
         rot6d = smpl_to_6d(pose)                               # (T, 25, 6)
         windows = get_sliding_windows(rot6d, window_size=60, step=30)  # (N_w, 60, 25, 6)
 
-        # Batch encode all windows at once for efficiency
-        x = torch.from_numpy(windows).float().to(DEVICE)  # (N_w, 60, 25, 6)
-        window_embs = encoder(x)  # (N_w, 512)
+        # Extract features for all windows
+        window_embs = []
+        for window in windows:
+            x = torch.from_numpy(window).float().unsqueeze(0).to(DEVICE)  # (1, 60, 25, 6)
+            window_emb = encoder(x)  # (1, 512)
+            window_embs.append(window_emb)
 
-        # Mean pool across windows
+        # Stack and mean pool
+        window_embs = torch.cat(window_embs, dim=0)  # (N_w, 512)
         pooled_emb = window_embs.mean(0, keepdim=True).cpu().numpy()  # (1, 512)
         embs.append(pooled_emb)
 
     return np.vstack(embs)  # (N, 512)
 
 
+# ── Classifier head ──────────────────────────────────────────────────────────
+
+# Remove ClassifierMLP - now using sklearn ensemble
+
+
+def oversample_class2(X_train: np.ndarray, y_train: np.ndarray) -> tuple:
+    """
+    Oversample class 2 (severe PD) to balance the training set.
+    """
+    idx2 = np.where(y_train == 2)[0]
+    if len(idx2) == 0:
+        return X_train, y_train
+
+    n_repeat = max(1, len(y_train[y_train == 0]) // max(1, len(idx2)))
+    aug_idx = np.concatenate([np.arange(len(y_train))] + [idx2] * (n_repeat - 1))
+    return X_train[aug_idx], y_train[aug_idx]
+
+
+# Remove train_classifier function - now using sklearn in train_and_predict
+
+
 def train_and_predict(train_poses: list, y_train: np.ndarray,
                       test_poses: list, care_pd_dir: str = None) -> np.ndarray:
     """
-    Main prediction pipeline.
+    Main prediction pipeline with hybrid features and sklearn ensemble.
 
-    Primary path: Handcrafted gait features → sklearn ensemble (RF + GB)
-    This approach directly targets PD-specific gait characteristics and
-    uses proven sklearn models that handle small datasets well.
+    Path A (primary): MotionCLIP + handcrafted features → sklearn ensemble
+    Path B (fallback): Handcrafted features only → sklearn ensemble
 
-    Optional enhancement: concatenate MotionCLIP features if available.
+    The primary approach combines MotionCLIP embeddings with comprehensive
+    handcrafted gait features, then uses a voting ensemble of GradientBoosting
+    and SVC with class_weight='balanced'. This leverages both deep motion
+    representations and clinical gait biomarkers.
     """
-    print(f'[genome] Extracting handcrafted gait features...', flush=True)
-    feat_tr = np.stack([extract_gait_features(p) for p in train_poses])
-    feat_te = np.stack([extract_gait_features(p) for p in test_poses])
-
-    # Optionally concatenate MotionCLIP features
     enc = load_motionclip(care_pd_dir)
-    if enc is not None:
-        print(f'[genome] Adding MotionCLIP features (device={DEVICE})', flush=True)
-        try:
-            mc_tr = extract_motionclip_features(enc, train_poses)  # (N_train, 512)
-            mc_te = extract_motionclip_features(enc, test_poses)   # (N_test, 512)
-            feat_tr = np.concatenate([feat_tr, mc_tr], axis=1)
-            feat_te = np.concatenate([feat_te, mc_te], axis=1)
-            print(f'[genome] Combined features: {feat_tr.shape[1]} dims', flush=True)
-        except Exception as e:
-            print(f'[genome] MotionCLIP feature extraction failed: {e}', flush=True)
 
-    print(f'[genome] Training sklearn ensemble (RF+GB) on {feat_tr.shape[1]}-dim features', flush=True)
-    return train_sklearn_ensemble(feat_tr, y_train, feat_te)
+    # Extract handcrafted features for all poses
+    X_tr_gait = np.stack([extract_gait_features(p) for p in train_poses])
+    X_te_gait = np.stack([extract_gait_features(p) for p in test_poses])
+
+    if enc is not None:
+        print(f'[genome] Path A: Hybrid features (MotionCLIP + gait) → sklearn ensemble (device={DEVICE})', flush=True)
+        # Extract MotionCLIP features
+        X_tr_clip = extract_motionclip_features(enc, train_poses)
+        X_te_clip = extract_motionclip_features(enc, test_poses)
+        # Combine features
+        X_tr = np.concatenate([X_tr_gait, X_tr_clip], axis=1)
+        X_te = np.concatenate([X_te_gait, X_te_clip], axis=1)
+    else:
+        print(f'[genome] Path B: Handcrafted gait features only → sklearn ensemble', flush=True)
+        X_tr, X_te = X_tr_gait, X_te_gait
+
+    # Use sklearn ensemble with proper scaling and class balancing
+    from sklearn.ensemble import GradientBoostingClassifier, VotingClassifier
+    from sklearn.svm import SVC
+    from sklearn.preprocessing import StandardScaler
+    from sklearn.pipeline import Pipeline
+
+    # Create ensemble with class_weight='balanced'
+    clf = Pipeline([
+        ('scaler', StandardScaler()),
+        ('ensemble', VotingClassifier([
+            ('gbc', GradientBoostingClassifier(n_estimators=100, random_state=42)),
+            ('svc', SVC(kernel='rbf', C=10, gamma='scale', class_weight='balanced', probability=True))
+        ], voting='soft'))
+    ])
+
+    # Fit and predict
+    clf.fit(X_tr, y_train)
+    return clf.predict(X_te)
 
 # ===========================================================================
 # EVOLVE-BLOCK-END
