@@ -342,13 +342,16 @@ def run_benchmark(fold_ids):
 
     # Checkpoint inventory
     print(f"\n[checkpoints] {_CKPT_ROOT}")
-    for bb in sorted(os.listdir(_CKPT_ROOT)):
-        bd = os.path.join(_CKPT_ROOT, bb)
-        if not os.path.isdir(bd): continue
-        files = [f for f in os.listdir(bd) if os.path.isfile(os.path.join(bd, f))]
-        for fn in files:
-            mb = os.path.getsize(os.path.join(bd, fn)) / 1e6
-            print(f"  {bb}/{fn}  ({mb:.1f} MB)")
+    if not os.path.isdir(_CKPT_ROOT):
+        print(f"  WARNING: directory not found — MotionCLIP methods will be skipped")
+    else:
+        for bb in sorted(os.listdir(_CKPT_ROOT)):
+            bd = os.path.join(_CKPT_ROOT, bb)
+            if not os.path.isdir(bd): continue
+            files = [f for f in os.listdir(bd) if os.path.isfile(os.path.join(bd, f))]
+            for fn in files:
+                mb = os.path.getsize(os.path.join(bd, fn)) / 1e6
+                print(f"  {bb}/{fn}  ({mb:.1f} MB)")
 
     # Load dataset
     print(f"\n[data] Loading {_DATASET} ...")
