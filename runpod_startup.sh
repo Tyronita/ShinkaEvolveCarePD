@@ -177,6 +177,23 @@ else
   log "Dataset already present: $DATASET_PKL"
 fi
 
+# ── 4b. Pretrained checkpoints (gdown from Google Drive) ─────────────────────
+CKPT_DIR="$CARE_PD_DIR/assets/Pretrained_checkpoints"
+MOTIONCLIP_CKPT="$CKPT_DIR/motionclip/motionclip_encoder_checkpoint_0100.pth.tar"
+if [ ! -f "$MOTIONCLIP_CKPT" ]; then
+  log "Downloading pretrained checkpoints (via gdown)..."
+  uv pip install gdown -q
+  mkdir -p "$CARE_PD_DIR/assets"
+  cd "$CARE_PD_DIR/assets"
+  gdown 1n-iZFKWmcy6UIQgW9YAkT4Y2DQILSIrp
+  unzip -q Pretrained_checkpoints.zip
+  rm -f Pretrained_checkpoints.zip
+  cd "$SHINKA_DIR"
+  log "Checkpoints downloaded"
+else
+  log "Pretrained checkpoints already present"
+fi
+
 # ── 5. Create .env ────────────────────────────────────────────────────────────
 log "=== Step 5: Writing .env ==="
 
