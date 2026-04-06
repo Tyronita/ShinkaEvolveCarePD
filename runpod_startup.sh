@@ -186,7 +186,7 @@ if [ ! -f "$MOTIONCLIP_CKPT" ]; then
   mkdir -p "$CARE_PD_DIR/assets"
   cd "$CARE_PD_DIR/assets"
   gdown 1n-iZFKWmcy6UIQgW9YAkT4Y2DQILSIrp
-  unzip -q Pretrained_checkpoints.zip
+  python -c "import zipfile; zipfile.ZipFile('Pretrained_checkpoints.zip').extractall('.')"
   rm -f Pretrained_checkpoints.zip
   cd "$SHINKA_DIR"
   log "Checkpoints downloaded"
