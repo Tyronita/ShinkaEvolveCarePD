@@ -233,7 +233,7 @@ fi
 # ── 6b. Preflight benchmark — all methods scored before evolution starts ──────
 log "=== Step 6b: Preflight benchmark (all methods, fold 1) ==="
 log "Testing RandomForest, GradientBoosting, 1D-CNN, MotionCLIP — results below:"
-python "$TASK_DIR/care_pd_task/preflight.py" --folds 1
+python "$TASK_DIR/care_pd_task/preflight.py" --folds 1 || log "WARNING: Preflight failed (non-fatal) — continuing to evolution"
 log "=== Preflight complete — starting evolution ==="
 
 # ── 7. Serve ShinkaEvolve docs ───────────────────────────────────────────────
