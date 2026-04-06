@@ -497,7 +497,7 @@ def run_benchmark(fold_ids):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--folds", nargs="+", type=int, default=[0],
-                        help="Fold indices to benchmark (default: fold 0 only)")
+    parser.add_argument("--folds", nargs="+", type=int, default=[1],
+                        help="Fold indices to benchmark (1-indexed, default: fold 1)")
     args = parser.parse_args()
     run_benchmark(args.folds)
