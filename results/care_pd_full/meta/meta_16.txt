@@ -1,0 +1,159 @@
+# INDIVIDUAL PROGRAM SUMMARIES
+
+The following are summaries of individual programs evaluated since the last meta update:
+
+**Program Name: Frozen MotionCLIP Encoder with MLP Classifier for UPDRS Gait**
+- **Implementation**: Converts SMPL axis-angle poses to 6D rotations, center-crops to 60 frames, encodes with a frozen pretrained MotionCLIP Transformer (512-dim), then trains a shallow MLP classifier with FocalLoss (alpha=0.25, gamma=2.0) and AdamW+cosine schedule.
+- **Performance**: macro_F1=0.35; f1=[normal:0.58, mild:0.46, severe:0.00], well below the 0.565 RandomForest baseline.
+- **Feedback**: The frozen encoder (Path B fallback using mean+std of 6D features likely activated) completely fails on class 2 (severe PD, 0.00 F1), suggesting the fixed 60-frame crop and frozen features lack discriminative power for severe cases; the model heavily over-predicts class 0, indicating the FocalLoss and class weighting are insufficient to address the severe imbalance.
+**Program Identifier:** Generation 0 - Patch Name initial_program - Correct Program: True
+
+**Program Name: MotionCLIP Sliding Window SMPL Gait UPDRS Classifier**
+- **Implementation**: Converts SMPL axis-angle poses to 6D rotations, applies sliding window (60-frame, stride 30) aggregation with mean pooling over MotionCLIP Transformer encoder embeddings (512-dim), then trains a shallow MLP classifier with FocalLoss and cosine LR scheduling.
+- **Performance**: Combined score of 0.0, failing all validation tests.
+- **Feedback**: The program contains structural errors—the code is incomplete/truncated mid-function in `extract_features`, and the diff-based modifications introduced syntax corruption, preventing successful execution and yielding a score of 0.0.
+**Program Identifier:** Generation 1 - Patch Name replace_extract_features_with_windowing - Correct Program: False
+
+**Program Name: Multi-Window MotionCLIP + Handcrafted Gait Feature Ensemble**
+- **Implementation**: Combines MotionCLIP transformer encoder (512-dim) with sliding window extraction and physics-informed handcrafted gait features (asymmetry, frequency domain, autocorrelation), feeding into an ensemble of GBM, Random Forest, and MLP classifiers with focal loss and oversampling.
+- **Performance**: Combined score of 0.0, failing all validation tests despite a sophisticated architecture.
+- **Feedback**: The program fails due to missing imports (`StandardScaler`, `GradientBoostingClassifier`, `RandomForestClassifier`) that are referenced in `train_ensemble` but never imported, causing runtime errors before any predictions are made.
+**Program Identifier:** Generation 4 - Patch Name multiwindow_motionclip_with_handcrafted_gait_features - Correct Program: False
+
+**Program Name: Multi-Window MotionCLIP Transformer with Attention Pooling**
+- **Implementation**: Uses a pretrained MotionCLIP encoder to extract 512-dim features from overlapping 60-frame windows (stride=30) of SMPL 6D rotation sequences, then applies learnable attention pooling over window embeddings before an MLP classifier with FocalLoss.
+- **Performance**: Combined score of 0.0, indicating complete failure to produce valid predictions.
+- **Feedback**: The program fails entirely, likely due to dependency issues with custom imports (`data.preprocessing.preprocessing_utils`, `model.backbone_loader`, `learning.criterion`, `data.dataloaders`) or the MotionCLIP checkpoint not being accessible, causing runtime errors before any training occurs.
+**Program Identifier:** Generation 5 - Patch Name motionclip_aggregated - Correct Program: False
+
+**Program Name: MotionCLIP Frozen Encoder + MLP Classifier for UPDRS Gait**
+- **Implementation**: Uses a pretrained MotionCLIP Transformer encoder (frozen) to extract 512-dim embeddings from SMPL 6D rotation sequences via sliding-window aggregation (60-frame windows, 30-frame stride), then trains a residual MLP classifier with weighted CrossEntropyLoss and cosine LR scheduling; falls back to mean+std of 6D rotation features if checkpoint unavailable.
+- **Performance**: Combined score of 0.0, failing all validation tests.
+- **Feedback**: The program scored 0.0 likely because the MotionCLIP pretrained checkpoint was unavailable at runtime, and the fallback path (Path B with mean+std features) either also failed or produced invalid predictions; the strict checkpoint dependency without robust fallback handling caused complete evaluation failure.
+**Program Identifier:** Generation 6 - Patch Name multiwindow_weighted_loss_improved_classifier - Correct Program: False
+
+**Program Name: MotionCLIP Frozen Encoder + MLP Classifier for UPDRS Gait**
+- **Implementation**: Uses frozen pretrained MotionCLIP Transformer encoder to extract 512-dim embeddings from SMPL 6D rotation sequences (multi-window sliding with 50% overlap), followed by a 3-layer MLP with LayerNorm, residual connections, and weighted CrossEntropyLoss with extra boost for severe class.
+- **Performance**: Combined score of 0.0, failing all validation tests despite sophisticated architecture.
+- **Feedback**: The program fails entirely, likely due to dependency on an external MotionCLIP checkpoint that is unavailable at runtime, and the fallback path (6D rotation mean+std → MLP) also fails validation, suggesting a fundamental runtime or data interface error rather than a modeling issue.
+**Program Identifier:** Generation 7 - Patch Name multiwindow_weighted_loss_improved_classifier - Correct Program: False
+
+**Program Name: MotionCLIP Frozen Encoder + Multi-Window Attention Pooling MLP**
+- **Implementation**: Converts SMPL axis-angle poses to 6D rotations, extracts sliding 60-frame windows (step=30) from each walk, encodes each window with a frozen pretrained MotionCLIP Transformer encoder (512-dim), pools window embeddings via learnable attention, then trains a shallow MLP classifier with FocalLoss and cosine LR scheduling.
+- **Performance**: macro_F1=0.32; f1=[normal:0.57, mild:0.37, severe:0.00]; well below the 0.565 RandomForest baseline.
+- **Feedback**: The severe class (class 2) is completely undetected (F1=0.00), and the model heavily predicts class 0 (557 vs 164 actual), suggesting the frozen MotionCLIP features are poorly discriminative for this task and the FocalLoss/class weighting is insufficient to overcome the imbalance; the fallback path (Path B) or fine-tuning the encoder would likely be necessary.
+**Program Identifier:** Generation 8 - Patch Name multi_window_attention_pooling - Correct Program: True
+
+**Program Name: MotionCLIP Frozen Encoder + Multi-Window MLP Classifier**
+- **Implementation**: Uses a frozen pretrained MotionCLIP Transformer encoder to extract 512-dim embeddings from SMPL 6D rotation sequences via sliding 60-frame windows with 50% overlap and attention pooling, followed by a shallow MLP classifier trained with FocalLoss and AdamW.
+- **Performance**: Combined macro-F1 of 0.36, well below the 0.565 RandomForest baseline, with f1_class2_severe=0.00 indicating complete failure on the minority class.
+- **Feedback**: The model almost entirely ignores class 2 (severe PD, 164 samples), predicting it only once across 781 walks, suggesting the frozen encoder features lack discriminative power for this task and the FocalLoss/class weighting is insufficient to overcome the imbalance; the high variance across folds (0.12–0.56) indicates instability likely caused by the fallback path or poor feature quality without fine-tuning.
+**Program Identifier:** Generation 10 - Patch Name multi_window_attention_pooling - Correct Program: True
+
+**Program Name: MotionCLIP Frozen Encoder + Multi-Window Attention MLP Classifier**
+- **Implementation**: Uses frozen MotionCLIP Transformer encoder (512-dim) with 50% overlapping 60-frame windows and attention pooling for feature extraction, followed by a 3-layer MLP with weighted CrossEntropyLoss, label smoothing, oversampling, and cosine LR scheduling.
+- **Performance**: Combined macro-F1 of 0.28, well below the 0.565 RandomForest baseline, with high variance across folds (0.007–0.393) and severe over-prediction of class 2 (489/781 predictions).
+- **Feedback**: The frozen MotionCLIP encoder with randomly initialized attention pooling (no training) likely produces poor discriminative features; the model collapses toward predicting class 2 excessively, suggesting the fallback path (Path B) may be activating or the pretrained weights are unavailable/mismatched.
+**Program Identifier:** Generation 12 - Patch Name fix_class_weights_and_improve_classifier - Correct Program: True
+
+**Program Name: MotionCLIP Frozen Encoder with Multi-Window Attention Pooling MLP**
+- **Implementation**: Uses frozen MotionCLIP Transformer encoder (512-dim) with 50% overlapping 60-frame windows and attention pooling for feature extraction, followed by a 3-layer MLP classifier trained with weighted CrossEntropyLoss, AdamW, and cosine LR scheduling.
+- **Performance**: macro_F1=0.41; class F1: normal=0.50, mild=0.50, severe=0.23; well below the 0.565 RandomForest baseline.
+- **Feedback**: The frozen MotionCLIP encoder (Path B fallback likely not triggered) underperforms the baseline, suggesting the pretrained weights may not transfer well or the attention pooling introduces noise; severe class (class 2) is particularly poorly classified (F1=0.23), and high fold-to-fold variance (0.20–0.60) indicates instability likely from the randomly initialized attention pooling layer applied without training.
+**Program Identifier:** Generation 13 - Patch Name fix_unused_class_weights - Correct Program: True
+
+**Program Name: MotionCLIP Frozen Encoder + Multi-Window MLP Classifier**
+- **Implementation**: Converts SMPL axis-angle poses to 6D rotations, extracts multi-window overlapping (50% hop) MotionCLIP embeddings with attention pooling, then trains a shallow MLP classifier with weighted CrossEntropyLoss, label smoothing, oversampling, and cosine LR scheduling.
+- **Performance**: Combined macro-F1 of 0.26 across 6 folds (781 walks), well below the 0.565 RandomForest baseline, with fold 2 scoring 0.0 and fold 4 being the best at 0.38.
+- **Feedback**: The model heavily over-predicts class 2 (severe, 531 predicted vs 164 actual), suggesting the attention pooling and class weighting failed to correct imbalance; the frozen MotionCLIP encoder without fine-tuning appears insufficient for this task, and the fallback path (Path B) may have been triggered if the checkpoint was unavailable.
+**Program Identifier:** Generation 14 - Patch Name none - Correct Program: True
+
+**Program Name: MotionCLIP Transformer + MLP Classifier for UPDRS Gait Scoring**
+- **Implementation**: Uses frozen MotionCLIP Transformer encoder (8-layer, 512-dim) to extract embeddings from sliding 60-frame windows (step=30) of SMPL 6D rotation sequences, mean-pooled into walk-level features fed to a 3-layer MLP with FocalLoss and class-2 oversampling; falls back to handcrafted gait features (FFT, asymmetry, autocorrelation) if checkpoint unavailable.
+- **Performance**: Combined macro-F1 of 0.34, well below the 0.565 RandomForest baseline, with severe class (class 2) F1 of only 0.25 and high prediction bias toward class 2 (439/781 predictions).
+- **Feedback**: The model severely over-predicts class 2 (severe PD) despite oversampling and focal loss, suggesting the frozen MotionCLIP features are poorly calibrated for this task; the fallback handcrafted features path likely activated (checkpoint missing), and the MLP training with oversampling created a class-2 bias rather than correcting imbalance.
+**Program Identifier:** Generation 15 - Patch Name class2_recovery_weighted_loss - Correct Program: True
+
+**Program Name: SVM Classifier with SVC RBF Kernel for Gait Scoring**
+- **Implementation**: The evolve block defines an SVM pipeline with StandardScaler and RBF-kernel SVC (C=10, gamma='scale', balanced class weights), but the code is syntactically broken — the pipeline definition appears as orphaned code without a proper function definition wrapping `train_and_predict`.
+- **Performance**: Combined macro-F1 score of 0.0, failing all validation tests due to a syntax/structural error.
+- **Feedback**: The program fails entirely because the `train_and_predict` function body is missing its `def` header and feature extraction logic, making the code unparseable/non-executable; the SVM approach itself (RBF kernel with class balancing) is a reasonable baseline strategy but cannot be evaluated in its current broken state.
+**Program Identifier:** Generation 16 - Patch Name none - Correct Program: False
+
+**Program Name: MotionCLIP Frozen Encoder with Multi-Window Attention Pooling MLP**
+- **Implementation**: Uses frozen MotionCLIP Transformer encoder (512-dim) with 50% overlapping 60-frame windows and attention pooling for feature extraction, followed by a 3-layer MLP classifier with weighted CrossEntropyLoss, label smoothing, oversampling, and cosine LR scheduling.
+- **Performance**: Combined macro-F1 of 0.24, well below the 0.565 RandomForest baseline, with heavily skewed predictions toward class 2 (severe) and poor class 0 (normal) recognition (F1=0.14).
+- **Feedback**: The model collapses toward predicting class 2 (525/781 predictions), suggesting the attention pooling weights are untrained/random and the frozen encoder features may not generalize well without fine-tuning; the fallback path or simpler statistical features would likely outperform this configuration.
+**Program Identifier:** Generation 18 - Patch Name class2_oversampled_weighted_mlp - Correct Program: True
+
+**Program Name: MotionCLIP Frozen Encoder + MLP Classifier for UPDRS Gait**
+- **Implementation**: Uses frozen pretrained MotionCLIP Transformer encoder to extract 512-dim embeddings from SMPL 6D rotation sequences via multi-window attention pooling, followed by a shallow MLP classifier with class-balanced training using inverse-frequency weighting and class-2 oversampling.
+- **Performance**: Combined score of 0.0, failing all validation tests.
+- **Feedback**: The program fails entirely, likely due to dependency on an external pretrained checkpoint that is unavailable at runtime, causing Path A to fail, while Path B (fallback 6D rotation mean+std features) may also be producing invalid outputs or crashing; the zero score indicates a fundamental runtime error rather than a suboptimal model.
+**Program Identifier:** Generation 19 - Patch Name fix_weighted_loss_bug - Correct Program: False
+
+**Program Name: MotionCLIP Transformer + MLP Classifier for UPDRS Gait Scoring**
+- **Implementation**: Uses a frozen pretrained MotionCLIP Transformer encoder (8-layer, 512-dim) to extract embeddings from sliding 60-frame windows of SMPL 6D rotation sequences, then mean-pools window embeddings and trains a shallow MLP classifier with FocalLoss and class-2 oversampling; falls back to handcrafted gait features (FFT, asymmetry, velocity stats) if checkpoint unavailable.
+- **Performance**: macro_F1=0.34, well below the 0.565 RandomForest baseline; severe class F1=0.29, mild F1=0.30, with high prediction bias toward class 2 (480/781 predictions).
+- **Feedback**: The model severely over-predicts class 2 (severe PD) despite oversampling and focal loss, suggesting the frozen MotionCLIP features (likely loaded from fallback handcrafted path given checkpoint dependency) are poorly discriminative; high fold-to-fold variance (0.12–0.42) indicates instability, and the handcrafted feature fallback path appears to be the active path given the poor performance.
+**Program Identifier:** Generation 20 - Patch Name class2_recovery_weighted_loss - Correct Program: True
+
+# GLOBAL INSIGHTS SCRATCHPAD
+
+The following are global insights about optimization approaches and their effectiveness:
+
+# Analysis of Program Evaluation Results
+
+## Successful Algorithmic Patterns
+
+- **The current best program (Generation 13, macro_F1=0.41)** uses frozen MotionCLIP encoder with multi-window 50% overlapping 60-frame windows, attention pooling, and critically **uses `nn.CrossEntropyLoss(weight=w)` with properly computed inverse-frequency class weights** — this is the key fix over Generation 10 (0.36) which computed weights but never passed them to the loss function. This single fix improved the combined score from 0.36 to 0.41.
+
+- **Weighted CrossEntropyLoss with inverse-frequency class weights** (Generation 13) outperforms FocalLoss with fixed alpha=0.25/gamma=2.0 (Generations 15, 20 both at 0.34). The confusion matrix for Generation 13 shows 33 correct severe predictions vs. near-zero in earlier programs, confirming that properly applied class weights provide better minority class recovery than FocalLoss alone.
+
+- **Multi-window sliding extraction with 50% overlap (stride=30)** combined with attention pooling remains the core architectural pattern across all working programs (Generations 8, 10, 13). Generation 13 achieves balanced per-class F1 (normal=0.50, mild=0.50, severe=0.23) compared to the collapsed predictions seen in programs without proper weighting (Generations 14, 18 with 525-531/781 predictions being class 2).
+
+- **Path A (frozen MotionCLIP) with robust Path B fallback** continues to be the only architecture producing valid predictions across all folds. Generation 13 shows consistent non-zero predictions across all 6 folds (range: 0.196–0.597), confirming the encoder is loading successfully in this configuration.
+
+## Ineffective Approaches
+
+- **FocalLoss with oversampling** (Generations 15, 20, both macro_F1=0.34) consistently underperforms weighted CrossEntropyLoss (Generation 13, 0.41). Despite FocalLoss being theoretically suited for imbalance, the fixed alpha=0.25 and gamma=2.0 parameters combined with class-2 oversampling created a class-2 prediction bias (439/781 and 480/781 predictions respectively), worse than the balanced predictions in Generation 13 (128/781 class-2 predictions vs. 164 actual).
+
+- **Attention pooling with randomly initialized, untrained weights** provides no learned aggregation benefit. Across Generations 8, 10, 13, and 18, the attention pooling layer is initialized randomly and set to `eval()` mode with `@torch.no_grad()`, meaning it applies random (not learned) attention weights. Despite this flaw, multi-window diversity still helps, but the pooling itself contributes noise rather than signal.
+
+- **Label smoothing combined with oversampling** (Generations 12, 14, 18) consistently produced worse results (0.28, 0.26, 0.24) than the current best without these techniques. Generation 18 showed the most extreme collapse (525/781 class-2 predictions), suggesting that combining oversampling with label smoothing amplifies class-2 bias rather than correcting it.
+
+- **Programs relying on MotionCLIP checkpoint availability without robust fallback** (Generations 19: score=0.0) fail entirely. Generation 19's zero score despite being architecturally similar to Generation 13 confirms that checkpoint loading failures cascade to complete program failure when the fallback path is broken.
+
+## Implementation Insights
+
+- **The critical fix in Generation 13** was passing computed class weights to the loss function: `loss_fn = nn.CrossEntropyLoss(weight=w)` where `w = counts.sum() / (n_cls * counts)`. Previous programs (Generation 10) computed `w` but used `FocalLoss(alpha=0.25, gamma=2.0)` without incorporating `w`, rendering the weight computation dead code. This single-line fix accounts for the 0.05 improvement (0.36→0.41).
+
+- **The confusion matrix for Generation 13** (169/341 normal correct, 149/276 mild correct, 33/164 severe correct) shows dramatically better severe class recovery than Generation 10 (1/164 severe correct). The prediction distribution (333 normal, 320 mild, 128 severe vs. true 341/276/164) is the most balanced seen across all evaluated programs, confirming that weighted CrossEntropyLoss successfully prevents majority-class collapse.
+
+- **High fold-to-fold variance persists** in Generation 13 (range: 0.196–0.597, fold 4 best at 0.597, fold 2 worst at 0.196). This 3× variation between worst and best fold mirrors the pattern in Generation 10 (0.12–0.56), suggesting the variance is structural — likely from uneven severe PD case distribution across folds — rather than from the loss function choice.
+
+- **The attention pooling layer is re-initialized randomly for every call to `extract_features`** in Generation 13, meaning different folds use different random attention weights. This is an implementation bug that adds fold-to-fold variance without providing any learned benefit. Despite this, the program still achieves the best score, indicating the multi-window feature diversity dominates over pooling quality.
+
+## Performance Analysis
+
+- **Score progression across correct programs**: Generation 0 (0.35) → Generation 8 (0.32) → Generation 10 (0.36) → **Generation 13 (0.41, current best)**. The jump from 0.36 to 0.41 is the largest single improvement observed, attributable entirely to fixing the class weight application rather than any architectural change.
+
+- **Generation 13 vs. Generations 15/20 (FocalLoss variants)**: Both FocalLoss programs scored 0.34 vs. Generation 13's 0.41, a 21% relative improvement for weighted CrossEntropyLoss. This is particularly notable because Generations 15 and 20 added oversampling on top of FocalLoss, which should theoretically provide stronger imbalance correction but instead worsened performance.
+
+- **The 0.41 score remains 27% below the RandomForest baseline (0.565)**, confirming that frozen MotionCLIP features with shallow MLP classifiers are fundamentally insufficient regardless of loss function tuning. The severe class F1 of 0.23 (33/164 correct) is the primary bottleneck — improving this single class from 0.23 to ~0.60 would push the combined score above the baseline.
+
+- **Programs with broken implementations (Generations 16, 19: score=0.0)** continue to represent 2 of the 8 programs in this generation batch, maintaining the ~25% failure rate observed in previous generations. Generation 16 failed due to missing `def` header (syntax error), and Generation 19 failed due to checkpoint/fallback path issues, consistent with the pattern that implementation correctness rather than algorithmic sophistication is the primary failure mode.
+
+# META RECOMMENDATIONS
+
+The following are actionable recommendations for the next program generations:
+
+1. **Fix the attention pooling bug by making it a persistent, trained module rather than re-initializing it randomly per call.** Move `attention_pool` outside of `extract_features` and instead store raw per-window embeddings as features (shape `(N_windows, 512)`), then define a combined `AttentionPoolMLP` model inside `train_classifier` that learns attention weights jointly with the MLP classifier. This converts the current random-noise aggregation into a genuine learned temporal aggregation — the multi-window diversity already helps (Generation 13 beats single-window), so adding learned pooling on top should provide additional discriminative signal, particularly for the severe class where gait freezing episodes may appear in only some windows.
+
+2. **Add a RandomForest classifier trained on the same 512-dim MotionCLIP features and ensemble its `predict_proba` output with the MLP's softmax probabilities.** The RandomForest baseline achieves 0.565 macro-F1 on raw features vs. the current MLP's 0.41 on MotionCLIP features, suggesting tree-based methods capture complementary discriminative patterns. Import `sklearn.ensemble.RandomForestClassifier` with `n_estimators=200, class_weight='balanced'`, train it on `feat_tr`, then average `rf.predict_proba(feat_te)` with `softmax(mlp_logits)` using equal weights before taking argmax — this is a low-risk addition that preserves the working MLP pipeline while adding the tree-based signal that dominates the baseline.
+
+3. **Concatenate velocity features (frame-to-frame differences of 6D rotations) to the MotionCLIP embedding before the MLP classifier.** Compute `vel = np.diff(rot6d, axis=0)` for each window, take `mean` and `std` across frames to get a 300-dim velocity summary, then concatenate this to the 512-dim MotionCLIP embedding to form a 812-dim input to the MLP. PD gait is clinically characterized by reduced movement velocity and freezing episodes — these dynamics are discarded by the current mean-pooled MotionCLIP embedding but are directly captured by first-order differences, and this addition requires only minor changes to the existing working pipeline.
+
+4. **Unfreeze only the last 2 transformer encoder layers of MotionCLIP and fine-tune them jointly with the MLP at a very low learning rate (1e-5) while keeping earlier layers frozen.** The current frozen MotionCLIP features are demonstrably insufficient (0.41 vs. 0.565 RandomForest baseline), and the pretrained weights were trained on diverse motions rather than PD gait specifically. Use two parameter groups: `{'params': enc.encoder.layers[-2:].parameters(), 'lr': 1e-5}` and `{'params': clf.parameters(), 'lr': 1e-3}`, training for 100 epochs with the same weighted CrossEntropyLoss — this domain adaptation is the most direct path to surpassing the baseline since it allows the encoder to adapt its representations to PD-specific gait patterns.
+
+5. **Replace the single MLP with a deeper residual MLP (3 residual blocks) and increase training epochs to 300 with a warmup schedule.** The current 2-hidden-layer MLP (512→256→128→3) may be underfitting the 512-dim feature space given only 150 epochs — add residual connections `x = x + layer(x)` with layer norm between blocks, and implement a linear warmup for the first 30 epochs followed by cosine annealing. Keep the proven `nn.CrossEntropyLoss(weight=w)` with inverse-frequency weights unchanged, as this is the single most impactful component in the current best program, and focus the architectural change purely on classifier capacity and training stability.

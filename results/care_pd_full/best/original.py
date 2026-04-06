@@ -84,14 +84,83 @@ def smpl_to_6d(pose: np.ndarray) -> np.ndarray:
     return np.concatenate([r6, np.zeros((T, 1, 6), np.float32)], 1)  # (T, 25, 6)
 
 
-def crop_pad_frames(seq: np.ndarray, n: int = 60) -> np.ndarray:
-    """Center-crop or repeat-pad a (T, ...) sequence to exactly n frames."""
+def get_sliding_windows(seq: np.ndarray, window_size: int = 60, step: int = 30) -> np.ndarray:
+    """
+    Generate sliding windows from sequence with specified step size.
+
+    Args:
+        seq: (T, ...) input sequence
+        window_size: size of each window
+        step: step size between windows (50% overlap if step=30)
+
+    Returns:
+        (N, window_size, ...) array of windows
+    """
     T = len(seq)
-    if T >= n:
-        s = (T - n) // 2
-        return seq[s:s + n]
-    reps = (n + T - 1) // T
-    return np.tile(seq, (reps,) + (1,) * (seq.ndim - 1))[:n]
+    if T <= window_size:
+        # If sequence is too short, repeat-pad it first
+        reps = (window_size + T - 1) // T
+        seq = np.tile(seq, (reps,) + (1,) * (seq.ndim - 1))
+        T = len(seq)
+
+    # Generate starting indices for windows
+    starts = np.arange(0, T - window_size + 1, step)
+    if len(starts) == 0:
+        starts = np.array([0])  # Ensure at least one window
+
+    windows = np.array([seq[s:s + window_size] for s in starts])
+    return windows
+
+
+def extract_gait_features(pose: np.ndarray) -> np.ndarray:
+    """
+    Extract handcrafted gait features from SMPL pose sequence.
+    Designed for PD severity classification with focus on asymmetry and rhythm.
+    """
+    T = len(pose)
+    rot6d = smpl_to_6d(pose)  # (T, 25, 6)
+    flat = rot6d.reshape(T, -1)  # (T, 150)
+
+    # 1. Global statistics
+    mean_feat = flat.mean(0)   # (150,)
+    std_feat = flat.std(0)     # (150,)
+
+    # 2. Velocity (frame-to-frame difference) statistics
+    vel = np.diff(flat, axis=0)  # (T-1, 150)
+    vel_mean = vel.mean(0)       # (150,)
+    vel_std = vel.std(0)         # (150,)
+
+    # 3. Left-right asymmetry
+    asym_hip = (rot6d[:, 1, :] - rot6d[:, 2, :]).std(0)    # (6,)
+    asym_knee = (rot6d[:, 4, :] - rot6d[:, 5, :]).std(0)   # (6,)
+    asym_ankle = (rot6d[:, 7, :] - rot6d[:, 8, :]).std(0)  # (6,)
+
+    # 4. Stride frequency via FFT on pelvis rotation
+    pelvis = rot6d[:, 0, 0]  # (T,) first component of pelvis 6D
+    fft_mag = np.abs(np.fft.rfft(pelvis - pelvis.mean()))
+    freqs = np.fft.rfftfreq(T, d=1.0/30)  # 30 fps
+    gait_mask = (freqs >= 0.5) & (freqs <= 3.0)
+    stride_freq = freqs[gait_mask][np.argmax(fft_mag[gait_mask])] if gait_mask.any() else 0.0
+    stride_power = fft_mag[gait_mask].max() if gait_mask.any() else 0.0
+
+    # 5. Gait regularity: autocorrelation of pelvis
+    ac = np.correlate(pelvis - pelvis.mean(), pelvis - pelvis.mean(), mode='full')
+    ac = ac[T-1:T+30] / (ac[T-1] + 1e-8)  # normalized, first 30 lags
+    regularity = ac[1:11].mean()  # mean autocorrelation at lags 1-10
+
+    # 6. Freeze-of-gait proxy: high-frequency power ratio in ankles
+    ankle_l = rot6d[:, 7, 0]
+    fft_ankle = np.abs(np.fft.rfft(ankle_l - ankle_l.mean()))
+    freqs_a = np.fft.rfftfreq(T, d=1.0/30)
+    hf_mask = freqs_a > 3.0
+    lf_mask = (freqs_a >= 0.5) & (freqs_a <= 3.0)
+    fog_ratio = (fft_ankle[hf_mask].sum() / (fft_ankle[lf_mask].sum() + 1e-8))
+
+    return np.concatenate([
+        mean_feat, std_feat, vel_mean, vel_std,
+        asym_hip, asym_knee, asym_ankle,
+        [stride_freq, stride_power, regularity, fog_ratio]
+    ])
 
 
 # ── MotionCLIP encoder ──────────────────────────────────────────────────────
@@ -214,26 +283,28 @@ def load_motionclip(care_pd_dir: str) -> nn.Module:
 #          nn.CrossEntropyLoss(weight=class_weights_tensor)
 
 class FocalLoss(nn.Module):
-    def __init__(self, alpha: float = 0.25, gamma: float = 2.0):
+    def __init__(self, alpha: torch.Tensor, gamma: float = 2.0):
         super().__init__()
-        self.alpha = alpha
+        self.alpha = alpha  # (3,) tensor of per-class weights
         self.gamma = gamma
 
     def forward(self, logits: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
-        ce   = nn.functional.cross_entropy(logits, targets, reduction='none')
-        pt   = torch.exp(-ce)
-        return (self.alpha * (1 - pt) ** self.gamma * ce).mean()
+        ce = nn.functional.cross_entropy(logits, targets, reduction='none', weight=self.alpha)
+        pt = torch.exp(-ce)
+        return ((1 - pt) ** self.gamma * ce).mean()
 
 
 # ── Feature extraction ───────────────────────────────────────────────────────
 
 @torch.no_grad()
-def extract_features(encoder: nn.Module, poses: list) -> np.ndarray:
+def extract_motionclip_features(encoder: nn.Module, poses: list) -> np.ndarray:
     """
-    Extract MotionCLIP embeddings using multi-window attention pooling.
+    Extract MotionCLIP embeddings using multi-window mean pooling.
 
-    Strategy: slide 60-frame windows with 50% overlap → encode each → attention pooling.
-    Preserves temporal dynamics and captures multiple gait cycles.
+    Strategy: slide 60-frame windows across each walk → extract per-window features
+              → mean-pool across windows → 512-dim walk-level embedding.
+
+    Uses simple mean pooling instead of untrainable attention pooling.
 
     Args:
         encoder: frozen MotionCLIPEncoder on DEVICE
@@ -241,45 +312,22 @@ def extract_features(encoder: nn.Module, poses: list) -> np.ndarray:
     Returns:
         (N, 512) numpy feature matrix
     """
-    # Define window parameters
-    window_size = 60
-    hop_length = window_size // 2  # 50% overlap
-
-    # Attention pooling layer (shared across samples)
-    attention_pool = nn.Sequential(
-        nn.Linear(512, 64),
-        nn.Tanh(),
-        nn.Linear(64, 1)
-    ).to(DEVICE)
-    attention_pool.eval()  # No gradients - just for inference
-
     embs = []
     for pose in poses:
-        rot6d = smpl_to_6d(pose)  # (T, 25, 6)
-        T = rot6d.shape[0]
+        rot6d = smpl_to_6d(pose)                               # (T, 25, 6)
+        windows = get_sliding_windows(rot6d, window_size=60, step=30)  # (N_w, 60, 25, 6)
 
-        # Generate overlapping windows
-        if T <= window_size:
-            # Short sequence - use center crop
-            seq = crop_pad_frames(rot6d, n=window_size)
-            x = torch.from_numpy(seq).float().unsqueeze(0).to(DEVICE)
-            window_embs = encoder(x)  # (1, 512)
-        else:
-            # Extract overlapping windows
-            windows = []
-            for start_idx in range(0, T - window_size + 1, hop_length):
-                end_idx = start_idx + window_size
-                window = rot6d[start_idx:end_idx]
-                windows.append(window)
-            # Stack and encode all windows
-            x = torch.from_numpy(np.stack(windows)).float().to(DEVICE)  # (N_w, 60, 25, 6)
-            window_embs = encoder(x)  # (N_w, 512)
+        # Extract features for all windows
+        window_embs = []
+        for window in windows:
+            x = torch.from_numpy(window).float().unsqueeze(0).to(DEVICE)  # (1, 60, 25, 6)
+            window_emb = encoder(x)  # (1, 512)
+            window_embs.append(window_emb)
 
-            # Apply attention pooling
-            attn_weights = torch.softmax(attention_pool(window_embs), dim=0)  # (N_w, 1)
-            window_embs = (attn_weights * window_embs).sum(dim=0, keepdim=True)  # (1, 512)
-
-        embs.append(window_embs.cpu().numpy())
+        # Stack and mean pool
+        window_embs = torch.cat(window_embs, dim=0)  # (N_w, 512)
+        pooled_emb = window_embs.mean(0, keepdim=True).cpu().numpy()  # (1, 512)
+        embs.append(pooled_emb)
 
     return np.vstack(embs)  # (N, 512)
 
@@ -303,27 +351,43 @@ class ClassifierMLP(nn.Module):
         return self.net(x)
 
 
+def oversample_class2(X_train: np.ndarray, y_train: np.ndarray) -> tuple:
+    """
+    Oversample class 2 (severe PD) to balance the training set.
+    """
+    idx2 = np.where(y_train == 2)[0]
+    if len(idx2) == 0:
+        return X_train, y_train
+
+    n_repeat = max(1, len(y_train[y_train == 0]) // max(1, len(idx2)))
+    aug_idx = np.concatenate([np.arange(len(y_train))] + [idx2] * (n_repeat - 1))
+    return X_train[aug_idx], y_train[aug_idx]
+
+
 def train_classifier(feat_train: np.ndarray, y_train: np.ndarray,
                      feat_test:  np.ndarray,
                      epochs: int = 150, lr: float = 1e-3) -> np.ndarray:
     """
-    Train ClassifierMLP on precomputed MotionCLIP features.
+    Train ClassifierMLP on precomputed features with class weighting and oversampling.
 
-    Class weights computed from training label distribution to handle imbalance.
-    Uses FocalLoss + AdamW + cosine LR schedule.
+    Uses weighted FocalLoss with per-class alpha vector computed from training distribution.
+    Applies oversampling for class 2 (severe PD) to mitigate imbalance.
 
     Mutable: epochs, lr, batch_size, loss function, optimizer, schedule.
     """
-    n_cls   = 3
-    counts  = np.bincount(y_train, minlength=n_cls).astype(float)
-    counts  = np.where(counts == 0, 1.0, counts)
-    # Class weights: inverse frequency, normalized
-    w       = torch.tensor(counts.sum() / (n_cls * counts), dtype=torch.float32).to(DEVICE)
+    n_cls = 3
+    counts = np.bincount(y_train, minlength=n_cls).astype(float)
+    counts = np.where(counts == 0, 1.0, counts)
+    # Per-class weights for loss function
+    w = torch.tensor(counts.sum() / (n_cls * counts), dtype=torch.float32).to(DEVICE)
+    loss_fn = FocalLoss(alpha=w, gamma=2.0)
 
-    clf  = ClassifierMLP(in_dim=feat_train.shape[1], n_classes=n_cls).to(DEVICE)
-    opt  = optim.AdamW(clf.parameters(), lr=lr, weight_decay=1e-3)
-    loss_fn = FocalLoss(alpha=0.25, gamma=2.0)
-    sch  = optim.lr_scheduler.CosineAnnealingLR(opt, T_max=epochs)
+    # Apply oversampling for class 2
+    feat_train, y_train = oversample_class2(feat_train, y_train)
+
+    clf = ClassifierMLP(in_dim=feat_train.shape[1], n_classes=n_cls).to(DEVICE)
+    opt = optim.AdamW(clf.parameters(), lr=lr, weight_decay=1e-3)
+    sch = optim.lr_scheduler.CosineAnnealingLR(opt, T_max=epochs)
 
     X_tr = torch.from_numpy(feat_train.astype(np.float32)).to(DEVICE)
     y_tr = torch.tensor(y_train, dtype=torch.long).to(DEVICE)
@@ -350,24 +414,21 @@ def train_and_predict(train_poses: list, y_train: np.ndarray,
     """
     Main prediction pipeline.
 
-    Path A (preferred): Frozen MotionCLIP → 512-dim embeddings → MLP classifier
-    Path B (fallback):  Mean+std of 6D rotation features → MLP classifier
+    Path A (preferred): MotionCLIP features → MLP classifier with weighted loss
+    Path B (fallback):  Handcrafted gait features → MLP classifier with weighted loss
 
-    Mutable: add fine-tuning path, multi-window aggregation, ensemble of paths.
+    Both paths use class-weighted loss and class 2 oversampling.
     """
     enc = load_motionclip(care_pd_dir)
 
     if enc is not None:
-        print(f'[genome] Path A: MotionCLIP frozen features → MLP  (device={DEVICE})', flush=True)
-        feat_tr = extract_features(enc, train_poses)   # (N_train, 512)
-        feat_te = extract_features(enc, test_poses)    # (N_test,  512)
+        print(f'[genome] Path A: MotionCLIP features → MLP (device={DEVICE})', flush=True)
+        feat_tr = extract_motionclip_features(enc, train_poses)   # (N_train, 512)
+        feat_te = extract_motionclip_features(enc, test_poses)    # (N_test,  512)
     else:
-        print(f'[genome] Path B: 6D rotation mean+std → MLP  (device={DEVICE})', flush=True)
-        def _fallback_feat(pose):
-            r = smpl_to_6d(pose).reshape(len(pose), -1)   # (T, 150)
-            return np.concatenate([r.mean(0), r.std(0)])   # (300,)
-        feat_tr = np.stack([_fallback_feat(p) for p in train_poses])
-        feat_te = np.stack([_fallback_feat(p) for p in test_poses])
+        print(f'[genome] Path B: Handcrafted gait features → MLP (device={DEVICE})', flush=True)
+        feat_tr = np.stack([extract_gait_features(p) for p in train_poses])
+        feat_te = np.stack([extract_gait_features(p) for p in test_poses])
 
     return train_classifier(feat_tr, y_train, feat_te)
 
