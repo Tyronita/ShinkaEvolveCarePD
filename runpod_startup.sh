@@ -101,8 +101,8 @@ pip install uv -q 2>/dev/null || true
 
 cd "$SHINKA_DIR"
 if [ ! -d ".venv" ]; then
-  log "Creating venv with uv..."
-  uv venv --python 3.11
+  log "Creating venv with uv (inheriting system site-packages for pre-installed torch)..."
+  uv venv --python 3.11 --system-site-packages
 fi
 
 source .venv/bin/activate
@@ -114,9 +114,10 @@ uv pip install -e . -q
 log "Installing additional deps..."
 uv pip install python-dotenv datasets scikit-learn scipy huggingface_hub smplx -q
 
-log "Installing PyTorch with CUDA 11.8..."
-uv pip install torch==2.6.0+cu118 torchvision==0.21.0+cu118 \
-  --index-url https://download.pytorch.org/whl/cu118 -q
+# PyTorch is pre-installed in the RunPod image — skip reinstall.
+# The venv inherits it via --system-site-packages.
+log "Checking inherited PyTorch..."
+python -c "import torch; print(f'  torch {torch.__version__}, CUDA {torch.version.cuda}')"
 
 # ── 3. Apply sys.executable fix to scheduler.py ──────────────────────────────
 log "=== Step 3: Patching scheduler.py ==="
