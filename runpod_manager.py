@@ -316,9 +316,14 @@ def cmd_deploy(gpu_type: str = "NVIDIA RTX A5000", gpu_count: int = 1):
         "os.execv('/bin/bash',['/bin/bash',d+'/runpod_startup.sh'])\n"
     )
     _enc = _b64.b64encode(_bootstrap.encode()).decode()
-    # No quotes in the -c code — shell strips single quotes causing NameError.
-    # Pass base64 payload as sys.argv[1] instead; the -c code has zero quotes.
-    STARTUP_CMD = f"python3 -c import sys,base64;exec(base64.b64decode(sys.argv[1])) {_enc}"
+    # dockerArgs is split on ALL spaces — the -c code must have ZERO spaces.
+    # Use __import__(chr()...) to avoid both import statements (need space) and
+    # string literals (quotes get stripped by shell). sys.argv[1] carries payload.
+    # Tokens: ["python3", "-c", "exec(...no spaces...)", "BASE64"]
+    _sys  = "+".join(f"chr({ord(c)})" for c in "sys")
+    _b64m = "+".join(f"chr({ord(c)})" for c in "base64")
+    _code = f"exec(__import__({_b64m}).b64decode(__import__({_sys}).argv[1]))"
+    STARTUP_CMD = f"python3 -c {_code} {_enc}"
 
     mutation = """
     mutation DeployPod($input: PodFindAndDeployOnDemandInput!) {
