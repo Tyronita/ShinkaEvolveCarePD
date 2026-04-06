@@ -60,7 +60,8 @@ SMOKE_ONLY="${SMOKE_ONLY:-false}"
 SKIP_DOCS="${SKIP_DOCS:-false}"
 DOCS_PORT="${DOCS_PORT:-8888}"
 WEBUI_PORT="${WEBUI_PORT:-8080}"
-RESULTS_DIR="${RESULTS_DIR:-$WORKSPACE/ShinkaEvolveCarePD/results/care_pd_full}"
+TASK_NAME="${TASK_NAME:-care_pd_task}"          # care_pd_task | care_pd_task_v2 | ...
+RESULTS_DIR="${RESULTS_DIR:-$WORKSPACE/ShinkaEvolveCarePD/$TASK_NAME/results}"
 
 SHINKA_DIR="$WORKSPACE/ShinkaEvolve"
 CARE_PD_DIR="$WORKSPACE/CARE-PD"
@@ -209,12 +210,12 @@ log ".env written to $TASK_DIR/.env"
 # ── 6. Validate pipeline (standalone evaluate.py smoke test) ─────────────────
 log "=== Step 6: Pipeline validation ==="
 
-VALIDATE_RESULTS="$TASK_DIR/care_pd_task/results_validate"
+VALIDATE_RESULTS="$TASK_DIR/$TASK_NAME/results_validate"
 mkdir -p "$VALIDATE_RESULTS"
 
-log "Running evaluate.py with initial.py..."
-python "$TASK_DIR/care_pd_task/evaluate.py" \
-  --program_path "$TASK_DIR/care_pd_task/initial.py" \
+log "Running evaluate.py with initial.py (task=$TASK_NAME)..."
+python "$TASK_DIR/$TASK_NAME/evaluate.py" \
+  --program_path "$TASK_DIR/$TASK_NAME/initial.py" \
   --results_dir "$VALIDATE_RESULTS"
 
 if [ -f "$VALIDATE_RESULTS/metrics.json" ]; then
@@ -233,7 +234,11 @@ fi
 # ── 6b. Preflight benchmark — all methods scored before evolution starts ──────
 log "=== Step 6b: Preflight benchmark (all methods, fold 1) ==="
 log "Testing RandomForest, GradientBoosting, 1D-CNN, MotionCLIP — results below:"
-python "$TASK_DIR/care_pd_task/preflight.py" --folds 1 || log "WARNING: Preflight failed (non-fatal) — continuing to evolution"
+if [ -f "$TASK_DIR/$TASK_NAME/preflight.py" ]; then
+  python "$TASK_DIR/$TASK_NAME/preflight.py" --folds 1 || log "WARNING: Preflight failed (non-fatal) — continuing to evolution"
+else
+  log "No preflight.py in $TASK_NAME — skipping"
+fi
 log "=== Preflight complete — starting evolution ==="
 
 # ── 7. Serve ShinkaEvolve docs ───────────────────────────────────────────────
@@ -279,10 +284,10 @@ while true; do
   echo "[git-persist] $(date -u '+%H:%M:%S') Committing results..."
 
   # Stage leaderboard + results (avoid large model files)
-  git add care_pd_task/leaderboard.csv 2>/dev/null || true
-  git add "results/care_pd_full/**/*.json" 2>/dev/null || true
-  git add "results/care_pd_full/**/*.py" 2>/dev/null || true
-  git add "results/care_pd_full/**/*.yaml" 2>/dev/null || true
+  git add "$TASK_NAME/leaderboard.csv" 2>/dev/null || true
+  git add "$TASK_NAME/results/**/*.json" 2>/dev/null || true
+  git add "$TASK_NAME/results/**/*.py" 2>/dev/null || true
+  git add "$TASK_NAME/results/**/*.yaml" 2>/dev/null || true
 
   if ! git diff --cached --quiet; then
     git commit -m "RunPod auto-commit: $(date -u '+%Y-%m-%dT%H:%M:%SZ') [skip ci]" 2>/dev/null || true
@@ -321,7 +326,7 @@ log ""
 
 cd "$TASK_DIR"
 shinka_run \
-  --task-dir care_pd_task \
+  --task-dir "$TASK_NAME" \
   --results_dir "$RESULTS_DIR" \
   --num_generations "$NUM_GENERATIONS" \
   --config-fname shinka_task.yaml \
@@ -334,8 +339,8 @@ log "=== Step 11: Final git push ==="
 
 if [ -n "${GITHUB_TOKEN:-}" ] && [ -n "${GITHUB_REPO:-}" ]; then
   cd "$TASK_DIR"
-  git add care_pd_task/leaderboard.csv 2>/dev/null || true
-  git add --all results/care_pd_full/ 2>/dev/null || true
+  git add "$TASK_NAME/leaderboard.csv" 2>/dev/null || true
+  git add --all "$TASK_NAME/results/" 2>/dev/null || true
 
   if ! git diff --cached --quiet; then
     git commit -m "RunPod completed: $NUM_GENERATIONS gens, cost_cap=\$$MAX_API_COSTS [$(date -u '+%Y-%m-%dT%H:%M:%SZ')]"
