@@ -322,7 +322,7 @@ def train_classifier(feat_train: np.ndarray, y_train: np.ndarray,
 
     clf  = ClassifierMLP(in_dim=feat_train.shape[1], n_classes=n_cls).to(DEVICE)
     opt  = optim.AdamW(clf.parameters(), lr=lr, weight_decay=1e-3)
-    loss_fn = FocalLoss(alpha=0.25, gamma=2.0)
+    loss_fn = nn.CrossEntropyLoss(weight=w)
     sch  = optim.lr_scheduler.CosineAnnealingLR(opt, T_max=epochs)
 
     X_tr = torch.from_numpy(feat_train.astype(np.float32)).to(DEVICE)

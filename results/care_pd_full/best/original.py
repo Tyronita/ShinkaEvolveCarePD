@@ -230,10 +230,10 @@ class FocalLoss(nn.Module):
 @torch.no_grad()
 def extract_features(encoder: nn.Module, poses: list) -> np.ndarray:
     """
-    Extract MotionCLIP embeddings for a list of variable-length pose arrays.
+    Extract MotionCLIP embeddings using multi-window attention pooling.
 
-    Strategy: center-crop each walk to 60 frames → encode → 512-dim embedding.
-    Mutable: try sliding-window aggregation, multi-scale crops, temporal pooling.
+    Strategy: slide 60-frame windows with 50% overlap → encode each → attention pooling.
+    Preserves temporal dynamics and captures multiple gait cycles.
 
     Args:
         encoder: frozen MotionCLIPEncoder on DEVICE
@@ -241,13 +241,47 @@ def extract_features(encoder: nn.Module, poses: list) -> np.ndarray:
     Returns:
         (N, 512) numpy feature matrix
     """
+    # Define window parameters
+    window_size = 60
+    hop_length = window_size // 2  # 50% overlap
+
+    # Attention pooling layer (shared across samples)
+    attention_pool = nn.Sequential(
+        nn.Linear(512, 64),
+        nn.Tanh(),
+        nn.Linear(64, 1)
+    ).to(DEVICE)
+    attention_pool.eval()  # No gradients - just for inference
+
     embs = []
     for pose in poses:
-        rot6d = smpl_to_6d(pose)                               # (T, 25, 6)
-        seq   = crop_pad_frames(rot6d, n=60)                   # (60, 25, 6)
-        x     = torch.from_numpy(seq).float().unsqueeze(0).to(DEVICE)  # (1, 60, 25, 6)
-        embs.append(encoder(x).cpu().numpy())                  # (1, 512)
-    return np.vstack(embs)                                     # (N, 512)
+        rot6d = smpl_to_6d(pose)  # (T, 25, 6)
+        T = rot6d.shape[0]
+
+        # Generate overlapping windows
+        if T <= window_size:
+            # Short sequence - use center crop
+            seq = crop_pad_frames(rot6d, n=window_size)
+            x = torch.from_numpy(seq).float().unsqueeze(0).to(DEVICE)
+            window_embs = encoder(x)  # (1, 512)
+        else:
+            # Extract overlapping windows
+            windows = []
+            for start_idx in range(0, T - window_size + 1, hop_length):
+                end_idx = start_idx + window_size
+                window = rot6d[start_idx:end_idx]
+                windows.append(window)
+            # Stack and encode all windows
+            x = torch.from_numpy(np.stack(windows)).float().to(DEVICE)  # (N_w, 60, 25, 6)
+            window_embs = encoder(x)  # (N_w, 512)
+
+            # Apply attention pooling
+            attn_weights = torch.softmax(attention_pool(window_embs), dim=0)  # (N_w, 1)
+            window_embs = (attn_weights * window_embs).sum(dim=0, keepdim=True)  # (1, 512)
+
+        embs.append(window_embs.cpu().numpy())
+
+    return np.vstack(embs)  # (N, 512)
 
 
 # ── Classifier head ──────────────────────────────────────────────────────────
