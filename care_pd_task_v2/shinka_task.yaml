@@ -128,9 +128,13 @@ evo_config:
     23 subjects · 781 walks · 6-fold subject-level CV
     Label distribution: {0(normal):341, 1(mild PD):276, 2(severe PD):164}
     Primary metric: macro-F1  |  MOST IMPORTANT: class 2 (severe PD) F1
-    Baseline (RandomForest):    macro=0.565  c0=0.702  c1=0.495  c2=0.497
-    LOSO SOTA (paper):          macro≥0.68
-    MIDA SOTA (paper):          macro≥0.74  ← stretch goal
+    Baseline v1 (RF mean+std):        macro=0.565  c0=0.702  c1=0.495  c2=0.497
+    Baseline v2 (RF balanced 300t):   macro=0.596  c0=0.742  c1=0.535  c2=0.510  ← START
+    1D-CNN 342-dim + z-norm (6CV):    macro=0.459  (below RF — needs better arch/features)
+    MotionCLIP frozen 1-crop+MLP:     macro=0.377  c2=0.047  (class2 collapses on single crop)
+    LOSO SOTA (paper):                macro≥0.68
+    MIDA SOTA (paper):                macro≥0.74  ← stretch goal
+    NOTE: fold 3 permanently has 0 class-2 test subjects → c2=0.000 in that fold always.
 
     6-fold subject splits (EXACTLY 6 folds — not 10):
       fold 1: test=[SUB18,SUB12,SUB01,SUB11]  159 walks

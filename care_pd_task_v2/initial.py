@@ -31,18 +31,20 @@
   Local dev:   varies (RTX 3050 4GB laptop, CPU fallback)
 
 ━━━ COMPREHENSIVE METHOD BENCHMARK (6-fold CV on BMCLab) ━━━━━━━━━━━━━━━━━━━━
-  Method                           macro_f1  c0     c1     c2     time/fold  status
-  ───────────────────────────────────────────────────────────────────────────────────
-  Random baseline (chance=0.333)   0.333     -      -      -      instant    reference
-  RandomForest mean+std (6CV)      0.565     0.702  0.495  0.497  ~2s CPU    ✓ CONFIRMED
-  MotionCLIP frozen 1-crop+MLP     0.377     0.571  0.514  0.047  ~60s GPU   ✗ class2 FAILS
-  OurModel 1D-CNN no norm          0.37*     0.60   0.18   0.19   ~20s GPU   ✗ no normalization
-  OurModel 1D-CNN + z-norm [this]  ???       ???    ???    ???    ~20s GPU   ← ACTIVE (fix)
-  MotionCLIP sliding-window+MLP    ???       ???    ???    ???    ~25s GPU   ← try next
-  ───────────────────────────────────────────────────────────────────────────────────
-  CARE-PD paper LOSO SOTA          0.68+     -      -      -      -          target (diff protocol)
-  CARE-PD paper MIDA SOTA          0.74+     -      -      -      -          stretch goal
-  (*estimated from folds 1-5; fold 3 has 0 class2 test samples → always hurts macro)
+  Method                                macro_f1  c0     c1     c2     time     status
+  ─────────────────────────────────────────────────────────────────────────────────────
+  Random baseline (chance=0.333)        0.333     -      -      -      instant  reference
+  RandomForest mean+std (v1)            0.565     0.702  0.495  0.497  ~12s     ✓ CONFIRMED
+  RF balanced_subsample 300t (v2 this)  0.596     0.742  0.535  0.510  ~68s     ✓ ACTIVE ←best
+  MotionCLIP frozen 1-crop+MLP          0.377     0.571  0.514  0.047  ~348s    ✗ class2 DEAD
+  OurModel 1D-CNN no z-norm (6CV)       0.417     0.672  0.287  0.292  ~20s/f   ✗ below RF
+  OurModel 1D-CNN + z-norm (6CV)        0.459     0.714  0.454  0.207  ~30s/f   ✗ below RF
+  MotionCLIP sliding-window+LogReg      ???       ???    ???    ???    ~25s/f   ← try
+  ─────────────────────────────────────────────────────────────────────────────────────
+  CARE-PD paper LOSO SOTA               0.68+     -      -      -      -        target
+  CARE-PD paper MIDA SOTA               0.74+     -      -      -      -        stretch
+  NOTE: fold 3 always c2=0.000 (0 class-2 test subjects) — unavoidable dataset artifact.
+        Macro penalty from fold 3 ≈ -0.05 from what it would be with balanced folds.
 
   KEY LESSON: MotionCLIP 60-frame center-crop loses 90%+ of temporal info on
   long walks (T up to 3015 frames). class2 F1 collapsed to 0.047.
