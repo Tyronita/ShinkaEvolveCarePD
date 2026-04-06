@@ -27,11 +27,13 @@
 
 set -euo pipefail
 
-# ── 0. Start sshd so pod is reachable for monitoring ─────────────────────────
-# This script runs as the container's main process (dockerArgs). Start sshd in
-# background first so SSH access works throughout the run.
+# ── 0. SSH setup (we bypass /start.sh via dockerArgs, so do it ourselves) ─────
+# RunPod injects the user's public key as $PUBLIC_KEY env var.
+mkdir -p /root/.ssh && chmod 700 /root/.ssh
+[ -n "${PUBLIC_KEY:-}" ] && echo "$PUBLIC_KEY" >> /root/.ssh/authorized_keys && chmod 600 /root/.ssh/authorized_keys
+ssh-keygen -A >/dev/null 2>&1 || true   # generate host keys if missing
 if [ -f /usr/sbin/sshd ]; then
-  /usr/sbin/sshd -D &
+  /usr/sbin/sshd &
   echo "[startup] sshd started (PID $!)"
 fi
 
