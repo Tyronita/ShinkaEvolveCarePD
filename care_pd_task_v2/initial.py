@@ -204,7 +204,12 @@ N_CLASSES = 3
 #   'MOTIONCLIP'— MotionCLIP sliding window + MLP (requires checkpoint)
 #   'ENSEMBLE'  — vote: CNN + RF + MotionCLIP
 
-METHOD = 'CNN'
+METHOD = 'RF'
+# WHY RF as default start: RandomForest reliably scores 0.565 (confirmed).
+# 1D-CNN without careful tuning scores 0.42 (below baseline) on this 620-sample dataset.
+# ShinkaEvolve starts here and EVOLVES to: CNN / MOTIONCLIP / ENSEMBLE / LSTM etc.
+# NOTE: fold 3 always c2=0.000 regardless of method — 0 class-2 test subjects in that fold.
+#       This is a dataset artifact. macro will be artificially low until fold 3 can be avoided.
 
 # ─────────────────────────────────────────────────────────────────────────────
 # SECTION A: ROTATION UTILITIES
