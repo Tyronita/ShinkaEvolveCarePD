@@ -28,8 +28,17 @@ HEADERS = {
 }
 REST_BASE = "https://rest.runpod.io/v1"
 
-# ── GPU priority list — RTX 4090 first, fallback to A40 / RTX 3090 ────────────
-GPU_PRIORITY = [
+# ── GPU priority lists ────────────────────────────────────────────────────────
+GPU_PRIORITY_BIG = [        # --big flag: A100 / A6000 first
+    "NVIDIA A100 80GB PCIe",
+    "NVIDIA A100-SXM4-80GB",
+    "NVIDIA A100-SXM4-40GB",
+    "NVIDIA A100 PCIe",
+    "NVIDIA RTX A6000",
+    "NVIDIA GeForce RTX 4090",
+    "NVIDIA RTX A5000",
+]
+GPU_PRIORITY = [            # default: RTX 4090 / A5000
     "NVIDIA GeForce RTX 4090",
     "NVIDIA RTX A5000",
     "NVIDIA GeForce RTX 3090",
@@ -98,6 +107,8 @@ def launch_pod(
     num_generations: int = 30,
     max_eval_jobs: int = 2,
     max_api_costs: float = 12.0,
+    task_name: str = "care_pd_task",
+    big_gpu: bool = False,
 ) -> dict:
     env = {
         # Secrets — must be created at console.runpod.io/user/secrets first
@@ -108,6 +119,7 @@ def launch_pod(
         "GITHUB_EMAIL":       "{{ RUNPOD_SECRET_GITHUB_EMAIL }}",
         # Plain config (not sensitive)
         "GITHUB_REPO":        GITHUB_REPO,
+        "TASK_NAME":          task_name,
         "NUM_GENERATIONS":    str(num_generations),
         "MAX_EVAL_JOBS":      str(max_eval_jobs),
         "MAX_PROPOSAL_JOBS":  str(max_eval_jobs),
@@ -116,13 +128,14 @@ def launch_pod(
         "DOCS_PORT":          "8888",
     }
 
+    gpu_list = GPU_PRIORITY_BIG if big_gpu else GPU_PRIORITY
     pod_config = {
-        "name":               "care-pd-shinka",
+        "name":               f"care-pd-{task_name}",
         "imageName":          DOCKER_IMAGE,
         "cloudType":          "SECURE",
         "computeType":        "GPU",
         "gpuCount":           1,
-        "gpuTypeIds":         GPU_PRIORITY,
+        "gpuTypeIds":         gpu_list,
         "gpuTypePriority":    "custom",  # try in order
         "containerDiskInGb":  20,
         "networkVolumeId":    volume_id,
@@ -130,8 +143,6 @@ def launch_pod(
         "ports":              ["22/tcp", "8080/http", "8888/http"],
         "env":                env,
         "dockerStartCmd":     ["bash", "-c", BOOTSTRAP_CMD],
-        "minVCPUPerGPU":      4,
-        "minRAMPerGPU":       16,
     }
 
     print(f"[pod] Launching pod (gens={num_generations}, max_cost=${max_api_costs})...")
@@ -183,6 +194,8 @@ def main():
     parser.add_argument("--generations", type=int, default=30)
     parser.add_argument("--cost-cap", type=float, default=12.0)
     parser.add_argument("--eval-jobs", type=int, default=2)
+    parser.add_argument("--task", default="care_pd_task", help="TASK_NAME to run (care_pd_task | care_pd_task_v2)")
+    parser.add_argument("--big", action="store_true", help="Use bigger GPU (A100/A6000 priority)")
     parser.add_argument("--status", metavar="POD_ID", help="Check pod status")
     parser.add_argument("--stop", metavar="POD_ID", help="Stop a pod")
     parser.add_argument("--list", action="store_true", help="List all pods")
@@ -209,11 +222,14 @@ def main():
 
     # Launch
     volume_id = get_or_create_volume()
+    print(f"[launch] task={args.task}  gens={args.generations}  cost_cap=${args.cost_cap}  big_gpu={args.big}")
     pod = launch_pod(
         volume_id=volume_id,
         num_generations=args.generations,
         max_eval_jobs=args.eval_jobs,
         max_api_costs=args.cost_cap,
+        task_name=args.task,
+        big_gpu=args.big,
     )
     print_pod_info(pod)
 
