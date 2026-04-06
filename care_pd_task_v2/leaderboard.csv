@@ -1,0 +1,2 @@
+timestamp_utc,genome_id,program_path,macro_f1,f1_class0,f1_class1,f1_class2,delta_macro,delta_c2,n_walks,mpjpe_mm,fold_f1_json,label_dist_json,pred_dist_json,combined_score,eval_time_s
+2026-04-06T14:36:09Z,initial,care_pd_task_v2/initial.py,0.4172,0.6724,0.2871,0.292,-0.1474,-0.2046,781,N/A,"{""1"": 0.2314, ""2"": 0.2915, ""3"": 0.2963, ""4"": 0.5279, ""5"": 0.4432, ""6"": 0.4356}","{""1"": 276, ""0"": 341, ""2"": 164}","{""1"": 135, ""2"": 288, ""0"": 358}",0.4172,1492.91
