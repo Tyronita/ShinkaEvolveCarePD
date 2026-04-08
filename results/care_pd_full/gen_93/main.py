@@ -39,9 +39,6 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # ===========================================================================
 
 # ── Rotation utilities ──────────────────────────────────────────────────────
-# Inlined from CARE-PD data/preprocessing/preprocessing_utils.py
-# (Zhou et al. 2019 — "On the Continuity of Rotation Representations")
-# Mutable: try 9D (full matrix), quaternion, or euler representations.
 
 def _aa_to_quat(aa: torch.Tensor) -> torch.Tensor:
     """Axis-angle (..., 3) → quaternion (..., 4) [w, x, y, z]."""
@@ -85,9 +82,7 @@ def smpl_to_6d(pose: np.ndarray) -> np.ndarray:
 
 
 def get_sliding_windows(seq: np.ndarray, window_size: int = 60, step: int = 30) -> np.ndarray:
-    """
-    Generate sliding windows from sequence with specified step size.
-    """
+    """Generate sliding windows from sequence with specified step size."""
     T = len(seq)
     if T <= window_size:
         reps = (window_size + T - 1) // T
@@ -115,23 +110,28 @@ def extract_gait_features(pose: np.ndarray) -> np.ndarray:
     - Gait regularity via autocorrelation
     - Freeze-of-gait proxy (high-frequency power ratio)
     - Per-joint velocity statistics for key gait joints
+    - Joint range of motion (ROM)
+    - Additional asymmetry pairs (shoulders, elbows, wrists)
     """
     T = len(pose)
     rot6d = smpl_to_6d(pose)  # (T, 25, 6)
     flat = rot6d[:, :24, :].reshape(T, -1)  # (T, 144) - exclude translation slot
 
     # ── 1. Global statistics ──────────────────────────────────────────────
-    mean_feat = flat.mean(0)          # (144,)
-    std_feat = flat.std(0)            # (144,)
-    range_feat = flat.max(0) - flat.min(0)  # (144,)
+    mean_feat = flat.mean(0)                      # (144,)
+    std_feat = flat.std(0)                        # (144,)
+    range_feat = flat.max(0) - flat.min(0)        # (144,)
+    p25_feat = np.percentile(flat, 25, axis=0)    # (144,)
+    p75_feat = np.percentile(flat, 75, axis=0)    # (144,)
 
     # ── 2. Velocity and acceleration ──────────────────────────────────────
     vel = np.diff(flat, axis=0)       # (T-1, 144)
-    acc = np.diff(vel, axis=0)        # (T-2, 144)
+    acc = np.diff(vel, axis=0) if T > 2 else np.zeros((1, 144), np.float32)
     vel_mean = vel.mean(0)            # (144,)
-    vel_std = vel.std(0)              # (144,) - important: PD has reduced velocity variance
-    vel_max = np.abs(vel).max(0)      # (144,)
+    vel_std = vel.std(0)              # (144,)
+    vel_abs_mean = np.abs(vel).mean(0)  # (144,)
     acc_std = acc.std(0)              # (144,)
+    acc_abs_mean = np.abs(acc).mean(0)  # (144,)
 
     # ── 3. Key joint velocity statistics ─────────────────────────────────
     # SMPL joints: pelvis=0, L_hip=1, R_hip=2, spine1=3, L_knee=4, R_knee=5
@@ -141,22 +141,28 @@ def extract_gait_features(pose: np.ndarray) -> np.ndarray:
     kj_vel_mean = np.abs(joint_vel[:, key_joints, :]).mean(axis=0).flatten()  # (54,)
     kj_vel_std = joint_vel[:, key_joints, :].std(axis=0).flatten()  # (54,)
 
-    # ── 4. Left-right asymmetry ───────────────────────────────────────────
+    # ── 4. Left-right asymmetry (extended) ───────────────────────────────
     # Larger asymmetry → more severe PD
-    asym_hip = rot6d[:, 1, :] - rot6d[:, 2, :]       # (T, 6)
-    asym_knee = rot6d[:, 4, :] - rot6d[:, 5, :]      # (T, 6)
-    asym_ankle = rot6d[:, 7, :] - rot6d[:, 8, :]     # (T, 6)
-    asym_foot = rot6d[:, 10, :] - rot6d[:, 11, :]    # (T, 6)
+    # SMPL: L_hip=1, R_hip=2, L_knee=4, R_knee=5, L_ankle=7, R_ankle=8
+    #       L_foot=10, R_foot=11, L_shoulder=16, R_shoulder=17
+    #       L_elbow=18, R_elbow=19, L_wrist=20, R_wrist=21
+    lr_pairs = [(1, 2), (4, 5), (7, 8), (10, 11), (16, 17), (18, 19), (20, 21)]
+    asym_parts = []
+    for l_idx, r_idx in lr_pairs:
+        diff = rot6d[:, l_idx, :] - rot6d[:, r_idx, :]  # (T, 6)
+        asym_parts.extend([diff.mean(0), diff.std(0), np.abs(diff).mean(0)])
+    asym_features = np.concatenate(asym_parts)  # (7*3*6 = 126,)
 
-    asym_features = np.concatenate([
-        asym_hip.mean(0), asym_hip.std(0),
-        asym_knee.mean(0), asym_knee.std(0),
-        asym_ankle.mean(0), asym_ankle.std(0),
-        asym_foot.mean(0), asym_foot.std(0),
-    ])  # (48,)
+    # ── 5. Joint Range of Motion (ROM) ────────────────────────────────────
+    rom_joints = [0, 1, 2, 4, 5, 7, 8, 10, 11, 12, 16, 17, 18, 19]
+    rom_parts = []
+    for j in rom_joints:
+        joint_data = rot6d[:, j, :]  # (T, 6)
+        rom = joint_data.max(0) - joint_data.min(0)  # (6,)
+        rom_parts.append(rom)
+    rom_features = np.concatenate(rom_parts)  # (14*6 = 84,)
 
-    # ── 5. Frequency domain features ─────────────────────────────────────
-    # Stride frequency from pelvis vertical oscillation
+    # ── 6. Frequency domain features ─────────────────────────────────────
     pelvis_signal = rot6d[:, 0, :]  # (T, 6) all pelvis 6D components
     fft_features = []
     freqs = np.fft.rfftfreq(T, d=1.0/30)  # 30 fps
@@ -178,12 +184,31 @@ def extract_gait_features(pose: np.ndarray) -> np.ndarray:
             gait_power = 0.0
 
         hf_power = fft_mag[hf_mask].sum() if hf_mask.any() else 0.0
-
         fft_features.extend([dominant_freq, gait_power / total_power, hf_power / total_power])
 
     fft_features = np.array(fft_features)  # (18,)
 
-    # ── 6. Ankle frequency features (freeze-of-gait proxy) ───────────────
+    # ── 7. Hip and knee FFT features ─────────────────────────────────────
+    hip_knee_fft = []
+    for j in [1, 2, 4, 5]:  # L_hip, R_hip, L_knee, R_knee
+        for comp in range(3):
+            sig = rot6d[:, j, comp] - rot6d[:, j, comp].mean()
+            if T > 10:
+                fft_mag = np.abs(np.fft.rfft(sig))
+                gait_mask = (freqs >= 0.5) & (freqs <= 3.0)
+                if gait_mask.any():
+                    dom_freq = freqs[gait_mask][np.argmax(fft_mag[gait_mask])]
+                    dom_power = fft_mag[gait_mask].max()
+                    total_power = fft_mag[1:].sum() + 1e-8
+                    gait_ratio = fft_mag[gait_mask].sum() / total_power
+                    hip_knee_fft.extend([dom_freq, dom_power, gait_ratio])
+                else:
+                    hip_knee_fft.extend([0.0, 0.0, 0.0])
+            else:
+                hip_knee_fft.extend([0.0, 0.0, 0.0])
+    hip_knee_fft = np.array(hip_knee_fft)  # (4*3*3 = 36,)
+
+    # ── 8. Ankle frequency features (freeze-of-gait proxy) ───────────────
     ankle_features = []
     for joint_idx in [7, 8]:  # L_ankle, R_ankle
         for ch in range(3):  # first 3 components
@@ -195,37 +220,40 @@ def extract_gait_features(pose: np.ndarray) -> np.ndarray:
             hf_power = fft_mag[hf_mask].sum() if hf_mask.any() else 0.0
             fog_ratio = hf_power / lf_power
             ankle_features.append(fog_ratio)
-
     ankle_features = np.array(ankle_features)  # (6,)
 
-    # ── 7. Gait regularity: autocorrelation of pelvis rotation ───────────
+    # ── 9. Gait regularity: autocorrelation of pelvis rotation ───────────
     pelvis_ac = rot6d[:, 0, 0] - rot6d[:, 0, 0].mean()
     ac = np.correlate(pelvis_ac, pelvis_ac, mode='full')
     ac = ac[T-1:] / (ac[T-1] + 1e-8)
     max_lag = min(60, len(ac))
     ac_trunc = ac[1:max_lag]
-    # Find first local maximum (stride period)
     regularity_features = np.array([
-        ac_trunc.max(),                    # peak autocorrelation (regularity)
-        ac_trunc.mean(),                   # mean autocorrelation
-        np.argmax(ac_trunc) / 30.0,       # stride period estimate (seconds)
+        ac_trunc.max() if len(ac_trunc) > 0 else 0.0,
+        ac_trunc.mean() if len(ac_trunc) > 0 else 0.0,
+        np.argmax(ac_trunc) / 30.0 if len(ac_trunc) > 0 else 0.0,
     ])  # (3,)
 
-    # ── 8. Walk duration and sequence-level features ──────────────────────
+    # ── 10. Walk duration and sequence-level features ─────────────────────
     walk_features = np.array([
         T / 30.0,                          # walk duration (seconds)
+        np.log1p(T),                       # log walk duration
         np.abs(vel).mean(),                # mean absolute velocity (all joints)
         vel_std.mean(),                    # mean velocity std
         acc_std.mean(),                    # mean acceleration std
-    ])  # (4,)
+        acc_abs_mean.mean(),               # mean absolute acceleration
+    ])  # (6,)
 
     return np.concatenate([
         mean_feat, std_feat, range_feat,
-        vel_mean, vel_std, vel_max,
-        acc_std,
+        p25_feat, p75_feat,
+        vel_mean, vel_std, vel_abs_mean,
+        acc_std, acc_abs_mean,
         kj_vel_mean, kj_vel_std,
         asym_features,
+        rom_features,
         fft_features,
+        hip_knee_fft,
         ankle_features,
         regularity_features,
         walk_features,
@@ -238,10 +266,10 @@ def train_sklearn_ensemble(X_train: np.ndarray, y_train: np.ndarray,
                            X_test: np.ndarray) -> np.ndarray:
     """
     Train a sklearn ensemble on handcrafted features.
-    Uses RandomForest + GradientBoosting with class weighting.
-    This is the primary classifier for the handcrafted feature path.
+    Uses RandomForest + GradientBoosting + SVC with class weighting.
     """
     from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier, VotingClassifier
+    from sklearn.svm import SVC
     from sklearn.preprocessing import StandardScaler
     from sklearn.pipeline import Pipeline
 
@@ -253,6 +281,18 @@ def train_sklearn_ensemble(X_train: np.ndarray, y_train: np.ndarray,
     counts = np.bincount(y_train, minlength=n_cls).astype(float)
     counts = np.where(counts == 0, 1.0, counts)
     class_weight = {i: counts.sum() / (n_cls * counts[i]) for i in range(n_cls)}
+
+    # Oversample class 2 for GradientBoosting (doesn't support class_weight)
+    idx2 = np.where(y_train == 2)[0]
+    n_majority = max(counts[0], counts[1])
+    if len(idx2) > 0:
+        n_repeat = max(1, round(n_majority / max(1, len(idx2))))
+        aug_idx = np.concatenate([np.arange(len(y_train))] + [idx2] * (n_repeat - 1))
+        X_train_aug = X_train[aug_idx]
+        y_train_aug = y_train[aug_idx]
+    else:
+        X_train_aug = X_train
+        y_train_aug = y_train
 
     rf = Pipeline([
         ('scaler', StandardScaler()),
@@ -277,21 +317,36 @@ def train_sklearn_ensemble(X_train: np.ndarray, y_train: np.ndarray,
         ))
     ])
 
-    # Soft voting ensemble
-    ensemble = VotingClassifier(
-        estimators=[('rf', rf), ('gb', gb)],
-        voting='soft',
-    )
+    svc = Pipeline([
+        ('scaler', StandardScaler()),
+        ('clf', SVC(
+            kernel='rbf',
+            C=10,
+            gamma='scale',
+            class_weight=class_weight,
+            probability=True,
+            random_state=42,
+        ))
+    ])
 
-    ensemble.fit(X_train, y_train)
-    return ensemble.predict(X_test)
+    # Fit GB on oversampled data
+    gb.fit(X_train_aug, y_train_aug)
+
+    # Fit RF and SVC on original (class_weight handles imbalance)
+    rf.fit(X_train, y_train)
+    svc.fit(X_train, y_train)
+
+    # Manual soft voting ensemble
+    proba_rf = rf.predict_proba(X_test)
+    proba_gb = gb.predict_proba(X_test)
+    proba_svc = svc.predict_proba(X_test)
+
+    # Weighted average: RF and SVC handle class imbalance natively, GB uses oversampling
+    avg_proba = (proba_rf + proba_gb + proba_svc) / 3.0
+    return avg_proba.argmax(axis=1)
 
 
 # ── MotionCLIP encoder ──────────────────────────────────────────────────────
-# Inlined from CARE-PD model/motionclip/transformer.py
-# Pretrained on diverse human motions → rich 512-dim gait embeddings.
-# Mutable: latent_dim, num_layers, num_heads, ff_size, dropout,
-#          add layer norm, modify positional encoding, try CLS-only pooling.
 
 class _PosEnc(nn.Module):
     def __init__(self, d: int, drop: float = 0.1, max_len: int = 5000):
@@ -313,12 +368,6 @@ class MotionCLIPEncoder(nn.Module):
     MotionCLIP Transformer encoder (inlined from CARE-PD).
     Input:  (B, T, 25, 6) — 6D SMPL rotations, variable T frames
     Output: (B, latent_dim) — motion embedding (mu token)
-
-    Pretrained weights match: njoints=25, nfeats=6, latent_dim=512,
-    ff_size=1024, num_layers=8, num_heads=4.
-
-    Checkpoint: {care_pd_dir}/assets/Pretrained_checkpoints/motionclip/
-                motionclip_encoder_checkpoint_0100.pth.tar
     """
     def __init__(self, njoints: int = 25, nfeats: int = 6,
                  latent_dim: int = 512, ff_size: int = 1024,
@@ -339,10 +388,8 @@ class MotionCLIPEncoder(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """x: (B, T, 25, 6) → mu: (B, latent_dim)"""
         B, T, J, F = x.shape
-        # (T, B, J*F)
         x = x.permute(1, 0, 2, 3).reshape(T, B, J * F)
-        x = self.embed(x)                                      # (T, B, D)
-        # Prepend learned mu / sigma query tokens
+        x = self.embed(x)
         y    = torch.zeros(B, dtype=torch.long, device=x.device)
         xseq = torch.cat([self.muQuery[y].unsqueeze(0),
                           self.sigmaQuery[y].unsqueeze(0), x], dim=0)
@@ -353,10 +400,7 @@ class MotionCLIPEncoder(nn.Module):
 
 
 def _load_checkpoint(model: nn.Module, path: str) -> nn.Module:
-    """
-    Load pretrained weights into model, stripping DataParallel 'module.' prefix.
-    Inlined from CARE-PD model/backbone_loader.py → load_pretrained_weights().
-    """
+    """Load pretrained weights into model, stripping DataParallel 'module.' prefix."""
     ckpt  = torch.load(path, map_location='cpu', weights_only=False)
     sd    = ckpt.get('state_dict', ckpt)
     msd   = model.state_dict()
@@ -374,10 +418,7 @@ def _load_checkpoint(model: nn.Module, path: str) -> nn.Module:
 
 
 def load_motionclip(care_pd_dir: str) -> nn.Module:
-    """
-    Load pretrained MotionCLIP encoder, frozen, on DEVICE.
-    Returns None if checkpoint not found or load fails.
-    """
+    """Load pretrained MotionCLIP encoder, frozen, on DEVICE. Returns None if unavailable."""
     if care_pd_dir is None:
         return None
     ckpt = os.path.join(care_pd_dir, 'assets', 'Pretrained_checkpoints',
@@ -399,31 +440,11 @@ def load_motionclip(care_pd_dir: str) -> nn.Module:
         return None
 
 
-# ── FocalLoss ────────────────────────────────────────────────────────────────
-# Inlined from CARE-PD learning/criterion.py
-# Better than CrossEntropyLoss for imbalanced UPDRS distribution {0:341,1:276,2:164}.
-# Mutable: alpha (down-weights easy examples), gamma (focusing strength).
-#          Try alpha=0.25/0.5, gamma=1.0/2.0/5.0. Or switch to WCE:
-#          nn.CrossEntropyLoss(weight=class_weights_tensor)
-
-class FocalLoss(nn.Module):
-    def __init__(self, alpha: torch.Tensor, gamma: float = 2.0):
-        super().__init__()
-        self.alpha = alpha  # (3,) tensor of per-class weights
-        self.gamma = gamma
-
-    def forward(self, logits: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
-        ce = nn.functional.cross_entropy(logits, targets, reduction='none', weight=self.alpha)
-        pt = torch.exp(-ce)
-        return ((1 - pt) ** self.gamma * ce).mean()
-
-
-# ── Feature extraction ───────────────────────────────────────────────────────
-
 @torch.no_grad()
 def extract_motionclip_features(encoder: nn.Module, poses: list) -> np.ndarray:
     """
-    Extract MotionCLIP embeddings using multi-window mean pooling.
+    Extract MotionCLIP embeddings using multi-window MEAN pooling.
+    Mean pooling is stable and avoids random attention pooling artifacts.
     """
     embs = []
     for pose in poses:
@@ -434,7 +455,7 @@ def extract_motionclip_features(encoder: nn.Module, poses: list) -> np.ndarray:
         x = torch.from_numpy(windows).float().to(DEVICE)  # (N_w, 60, 25, 6)
         window_embs = encoder(x)  # (N_w, 512)
 
-        # Mean pool across windows
+        # Mean pool across windows — simple and effective
         pooled_emb = window_embs.mean(0, keepdim=True).cpu().numpy()  # (1, 512)
         embs.append(pooled_emb)
 
@@ -446,15 +467,13 @@ def train_and_predict(train_poses: list, y_train: np.ndarray,
     """
     Main prediction pipeline.
 
-    Primary path: Handcrafted gait features → sklearn ensemble (RF + GB)
-    This approach directly targets PD-specific gait characteristics and
-    uses proven sklearn models that handle small datasets well.
-
+    Primary path: Handcrafted gait features → sklearn ensemble (RF + GB + SVC)
     Optional enhancement: concatenate MotionCLIP features if available.
     """
     print(f'[genome] Extracting handcrafted gait features...', flush=True)
     feat_tr = np.stack([extract_gait_features(p) for p in train_poses])
     feat_te = np.stack([extract_gait_features(p) for p in test_poses])
+    print(f'[genome] Handcrafted features: {feat_tr.shape[1]} dims', flush=True)
 
     # Optionally concatenate MotionCLIP features
     enc = load_motionclip(care_pd_dir)
@@ -469,7 +488,7 @@ def train_and_predict(train_poses: list, y_train: np.ndarray,
         except Exception as e:
             print(f'[genome] MotionCLIP feature extraction failed: {e}', flush=True)
 
-    print(f'[genome] Training sklearn ensemble (RF+GB) on {feat_tr.shape[1]}-dim features', flush=True)
+    print(f'[genome] Training sklearn ensemble (RF+GB+SVC) on {feat_tr.shape[1]}-dim features', flush=True)
     return train_sklearn_ensemble(feat_tr, y_train, feat_te)
 
 # ===========================================================================

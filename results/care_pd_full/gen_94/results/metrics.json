@@ -1,58 +1,58 @@
 {
-    "combined_score": 0.6231280787192782,
+    "combined_score": 0.5899757900004129,
     "public": {
-        "macro_f1": 0.6231,
+        "macro_f1": 0.59,
         "n_walks": 781,
-        "f1_class0_normal": 0.7741,
-        "f1_class1_mild": 0.5838,
-        "f1_class2_severe": 0.5115,
+        "f1_class0_normal": 0.7471,
+        "f1_class1_mild": 0.5567,
+        "f1_class2_severe": 0.4662,
         "per_fold_f1": {
             "1": {
-                "macro_f1": 0.3972,
+                "macro_f1": 0.3914,
                 "n_test_walks": 159,
                 "n_train_walks": 622
             },
             "2": {
-                "macro_f1": 0.4849,
+                "macro_f1": 0.4035,
                 "n_test_walks": 122,
                 "n_train_walks": 659
             },
             "3": {
-                "macro_f1": 0.5661,
+                "macro_f1": 0.5575,
                 "n_test_walks": 143,
                 "n_train_walks": 638
             },
             "4": {
-                "macro_f1": 0.7774,
+                "macro_f1": 0.6524,
                 "n_test_walks": 115,
                 "n_train_walks": 666
             },
             "5": {
-                "macro_f1": 0.4223,
+                "macro_f1": 0.4896,
                 "n_test_walks": 135,
                 "n_train_walks": 646
             },
             "6": {
-                "macro_f1": 0.4966,
+                "macro_f1": 0.4408,
                 "n_test_walks": 107,
                 "n_train_walks": 674
             }
         },
         "confusion_matrix": [
             [
-                281,
-                47,
-                13
+                285,
+                44,
+                12
             ],
             [
-                71,
-                155,
-                50
+                85,
+                140,
+                51
             ],
             [
-                33,
-                53,
-                78
+                52,
+                43,
+                69
             ]
         ],
         "label_dist": {
@@ -61,11 +61,11 @@
             "2": 164
         },
         "pred_dist": {
-            "0": 385,
-            "1": 255,
-            "2": 141
+            "0": 422,
+            "1": 227,
+            "2": 132
         },
         "mpjpe_mm": "N/A",
-        "eval_time_s": 951.58
+        "eval_time_s": 1477.57
     }
 }

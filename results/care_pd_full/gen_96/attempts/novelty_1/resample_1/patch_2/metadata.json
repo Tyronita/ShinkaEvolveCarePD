@@ -1,0 +1,14 @@
+{
+  "generation": 96,
+  "novelty_attempt": 1,
+  "resample_attempt": 1,
+  "patch_attempt": 2,
+  "success": false,
+  "num_applied": 0,
+  "patch_name": "hybrid_features_sklearn_ensemble",
+  "patch_description": "Key insights from analyzing prior programs:\n\n1. All prior programs scored 0.26-0.41 using MotionCLIP + MLP, far below the RandomForest baseline (0.565). The frozen MotionCLIP encoder wasn't pretrained on PD-specific gait patterns.\n\n2. The MLP classifier on 781 samples with 6-fold CV is prone to overfitting and instability. sklearn classifiers with class_weight='balanced' handle small datasets much better.\n\n3. Random attention pooling adds noise. Mean pooling is better but still limited.\n\n4. FocalLoss with scalar alpha ignores per-class weights, hurting class 2 recall.\n\nNovel approach:\n- PRIMARY: Comprehensive handcrafted gait features (statistics, velocity, acceleration, L-R asymmetry, ROM, FFT stride frequency, autocorrelation regularity, freeze-of-gait proxy)\n- OPTIONAL: MotionCLIP embeddings via mean-pooled sliding windows concatenated with handcrafted features\n- CLASSIFIER: Ensemble of GradientBoosting + SVM + RandomForest via soft voting, all with balanced class handling\n- StandardScaler normalization before classification\n- Oversampling class 2 for GradientBoosting which lacks class_weight parameter",
+  "error_msg": "Could not extract code from patch string",
+  "timestamp": "2026-04-08T22:57:05.992947",
+  "llm_cost": 0.36681,
+  "llm_model": null
+}

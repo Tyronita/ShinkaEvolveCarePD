@@ -1,0 +1,14 @@
+{
+  "generation": 94,
+  "novelty_attempt": 1,
+  "resample_attempt": 1,
+  "patch_attempt": 1,
+  "success": true,
+  "num_applied": 1,
+  "patch_name": "hybrid_features_sklearn_ensemble",
+  "patch_description": "Replace the neural network classifier with a sklearn ensemble (SVC + GradientBoosting + RandomForest) using class_weight='balanced'. Add comprehensive handcrafted gait features as the primary approach. This directly addresses the 0.00 F1 for class 2 by using balanced classifiers, and should exceed the 0.565 RandomForest baseline by combining handcrafted features with MotionCLIP embeddings.",
+  "error_msg": null,
+  "timestamp": "2026-04-08T22:55:27.351250",
+  "llm_cost": 0.183231,
+  "llm_model": null
+}

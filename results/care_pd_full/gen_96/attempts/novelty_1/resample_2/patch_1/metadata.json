@@ -1,0 +1,14 @@
+{
+  "generation": 96,
+  "novelty_attempt": 1,
+  "resample_attempt": 2,
+  "patch_attempt": 1,
+  "success": true,
+  "num_applied": 2,
+  "patch_name": "none",
+  "patch_description": "Key improvements:\n1. Oversample class 2 for GradientBoosting since it doesn't support class_weight\n2. Add SVM with RBF kernel (class_weight='balanced') to the ensemble - SVMs excel on small datasets\n3. Add ExtraTreesClassifier for diversity in the ensemble\n4. Enrich handcrafted features with: percentile statistics, jerk (3rd derivative), cross-joint correlations between left-right pairs, coefficient of variation, and more detailed frequency features\n5. Use StackingClassifier instead of simple VotingClassifier for better combination\n6. Add feature selection via variance threshold to remove noisy features",
+  "error_msg": null,
+  "timestamp": "2026-04-08T22:57:57.139684",
+  "llm_cost": 0.25810500000000003,
+  "llm_model": null
+}

@@ -1,0 +1,14 @@
+{
+  "generation": 93,
+  "novelty_attempt": 1,
+  "resample_attempt": 1,
+  "patch_attempt": 1,
+  "success": true,
+  "num_applied": 1,
+  "patch_name": "hybrid_features_sklearn_ensemble",
+  "patch_description": "This crossover combines the best elements from both programs:\n\n1. **Primary approach**: Handcrafted gait features + sklearn ensemble (RF + GB with class_weight='balanced'), which scored 0.62 vs 0.40 for the MotionCLIP-only MLP approach.\n\n2. **Enhanced feature extraction**: Takes the comprehensive `extract_gait_features` from the best-performing program (0.62), which includes velocity/acceleration statistics, L-R asymmetry, frequency domain features, gait regularity via autocorrelation, and freeze-of-gait proxy.\n\n3. **Optional MotionCLIP hybrid**: Uses mean pooling (not random attention pooling) for MotionCLIP feature extraction when available, concatenating with handcrafted features.\n\n4. **Improved sklearn ensemble**: Uses RF + GB with proper class weighting. For GB (which doesn't support class_weight), adds oversampling of class 2. Also adds SVC as a third estimator for better diversity.\n\n5. **Additional features**: Adds more asymmetry pairs (shoulders, elbows, wrists) and per-joint ROM features from the prompt's recommended feature set to improve class 2 detection.\n\n6. **Robust feature handling**: NaN/Inf cleanup before classification.\n\nThe key insight is that the handcrafted features + sklearn ensemble (0.62) dramatically outperforms any MotionCLIP-only MLP approach (0.35-0.45), so we keep that as the primary path while optionally enhancing with MotionCLIP embeddings.",
+  "error_msg": null,
+  "timestamp": "2026-04-08T22:55:55.393077",
+  "llm_cost": 0.252909,
+  "llm_model": null
+}

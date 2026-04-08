@@ -219,6 +219,63 @@ def extract_gait_features(pose: np.ndarray) -> np.ndarray:
         acc_std.mean(),                    # mean acceleration std
     ])  # (4,)
 
+    # ── 9. Coefficient of variation (CV) per joint ────────────────────────
+    # PD patients show higher variability relative to mean
+    joint_means = np.abs(flat.mean(0)) + 1e-8
+    joint_stds = flat.std(0)
+    cv_features = joint_stds / joint_means  # (144,)
+
+    # ── 10. Jerk (3rd derivative) — smoothness of movement ───────────────
+    # PD patients have less smooth movements (higher jerk)
+    if T > 3:
+        jerk = np.diff(acc, axis=0)  # (T-3, 144)
+        jerk_rms = np.sqrt((jerk ** 2).mean(0))  # (144,)
+    else:
+        jerk_rms = np.zeros(144)
+
+    # ── 11. Percentile features for key joints ───────────────────────────
+    percentile_features = []
+    for j in [0, 1, 2, 4, 5, 7, 8]:
+        joint_data = rot6d[:, j, :]  # (T, 6)
+        p10 = np.percentile(joint_data, 10, axis=0)
+        p90 = np.percentile(joint_data, 90, axis=0)
+        iqr = np.percentile(joint_data, 75, axis=0) - np.percentile(joint_data, 25, axis=0)
+        percentile_features.extend([p10, p90, iqr])
+    percentile_features = np.concatenate(percentile_features)  # (7*3*6=126,)
+
+    # ── 12. Cross-joint correlations (gait coordination) ─────────────────
+    # PD disrupts inter-limb coordination
+    corr_features = []
+    corr_pairs = [(1, 8), (2, 7), (4, 5), (7, 8), (1, 5), (2, 4)]  # contralateral pairs
+    for j1, j2 in corr_pairs:
+        for ch in range(3):  # first 3 components
+            s1 = rot6d[:, j1, ch]
+            s2 = rot6d[:, j2, ch]
+            if np.std(s1) > 1e-8 and np.std(s2) > 1e-8:
+                corr_features.append(np.corrcoef(s1, s2)[0, 1])
+            else:
+                corr_features.append(0.0)
+    corr_features = np.array(corr_features)  # (18,)
+
+    # ── 13. Velocity zero-crossing rate (cadence proxy) ──────────────────
+    zcr_features = []
+    for j in [7, 8, 1, 2]:  # ankles and hips
+        for ch in range(3):
+            v = np.diff(rot6d[:, j, ch])
+            zcr = np.sum(np.diff(np.sign(v)) != 0) / (len(v) + 1e-8)
+            zcr_features.append(zcr)
+    zcr_features = np.array(zcr_features)  # (12,)
+
+    # ── 14. Trunk stability features ─────────────────────────────────────
+    # PD patients have reduced trunk rotation and stability
+    trunk_joints = [0, 3, 6, 9, 12]  # pelvis, spine1, spine2, spine3, neck
+    trunk_vel = np.diff(rot6d[:, trunk_joints, :], axis=0)  # (T-1, 5, 6)
+    trunk_stability = np.array([
+        np.abs(trunk_vel).mean(),
+        trunk_vel.std(),
+        np.abs(trunk_vel).max(),
+    ])
+
     return np.concatenate([
         mean_feat, std_feat, range_feat,
         vel_mean, vel_std, vel_max,
@@ -229,6 +286,12 @@ def extract_gait_features(pose: np.ndarray) -> np.ndarray:
         ankle_features,
         regularity_features,
         walk_features,
+        cv_features,
+        jerk_rms,
+        percentile_features,
+        corr_features,
+        zcr_features,
+        trunk_stability,
     ]).astype(np.float32)
 
 
@@ -238,30 +301,64 @@ def train_sklearn_ensemble(X_train: np.ndarray, y_train: np.ndarray,
                            X_test: np.ndarray) -> np.ndarray:
     """
     Train a sklearn ensemble on handcrafted features.
-    Uses RandomForest + GradientBoosting with class weighting.
-    This is the primary classifier for the handcrafted feature path.
+    Uses RF + ExtraTrees + GB + SVM with class weighting and oversampling.
     """
-    from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier, VotingClassifier
+    from sklearn.ensemble import (RandomForestClassifier, GradientBoostingClassifier,
+                                  ExtraTreesClassifier, VotingClassifier)
+    from sklearn.svm import SVC
     from sklearn.preprocessing import StandardScaler
     from sklearn.pipeline import Pipeline
+    from sklearn.feature_selection import VarianceThreshold
 
     # Handle NaN/Inf in features
     X_train = np.nan_to_num(X_train, nan=0.0, posinf=0.0, neginf=0.0)
     X_test = np.nan_to_num(X_test, nan=0.0, posinf=0.0, neginf=0.0)
+
+    # Remove near-zero variance features
+    vt = VarianceThreshold(threshold=1e-6)
+    X_train = vt.fit_transform(X_train)
+    X_test = vt.transform(X_test)
 
     n_cls = 3
     counts = np.bincount(y_train, minlength=n_cls).astype(float)
     counts = np.where(counts == 0, 1.0, counts)
     class_weight = {i: counts.sum() / (n_cls * counts[i]) for i in range(n_cls)}
 
+    # Oversample minority classes for classifiers that don't support class_weight
+    idx2 = np.where(y_train == 2)[0]
+    idx1 = np.where(y_train == 1)[0]
+    idx0 = np.where(y_train == 0)[0]
+    n_max = len(idx0)
+    repeat2 = max(1, round(n_max / max(1, len(idx2))))
+    repeat1 = max(1, round(n_max / max(1, len(idx1))))
+    aug_idx = np.concatenate([
+        np.arange(len(y_train)),
+        np.tile(idx2, repeat2 - 1) if repeat2 > 1 else np.array([], dtype=int),
+        np.tile(idx1, repeat1 - 1) if repeat1 > 1 else np.array([], dtype=int),
+    ])
+    X_train_os = X_train[aug_idx]
+    y_train_os = y_train[aug_idx]
+
     rf = Pipeline([
         ('scaler', StandardScaler()),
         ('clf', RandomForestClassifier(
-            n_estimators=300,
+            n_estimators=500,
             max_depth=None,
             min_samples_leaf=2,
-            class_weight=class_weight,
+            class_weight='balanced',
             random_state=42,
+            n_jobs=-1,
+        ))
+    ])
+
+    et = Pipeline([
+        ('scaler', StandardScaler()),
+        ('clf', ExtraTreesClassifier(
+            n_estimators=500,
+            max_depth=None,
+            min_samples_leaf=2,
+            class_weight='balanced',
+            random_state=43,
             n_jobs=-1,
         ))
     ])
@@ -269,22 +366,43 @@ def train_sklearn_ensemble(X_train: np.ndarray, y_train: np.ndarray,
     gb = Pipeline([
         ('scaler', StandardScaler()),
         ('clf', GradientBoostingClassifier(
-            n_estimators=200,
+            n_estimators=300,
             max_depth=4,
             learning_rate=0.05,
             subsample=0.8,
+            min_samples_leaf=5,
             random_state=42,
         ))
     ])
 
-    # Soft voting ensemble
-    ensemble = VotingClassifier(
-        estimators=[('rf', rf), ('gb', gb)],
-        voting='soft',
-    )
+    svm = Pipeline([
+        ('scaler', StandardScaler()),
+        ('clf', SVC(
+            kernel='rbf',
+            C=10.0,
+            gamma='scale',
+            class_weight='balanced',
+            probability=True,
+            random_state=42,
+        ))
+    ])
 
-    ensemble.fit(X_train, y_train)
-    return ensemble.predict(X_test)
+    # Fit GB on oversampled data, others on original with class_weight
+    # Use a custom approach: fit individually then combine predictions
+    rf.fit(X_train, y_train)
+    et.fit(X_train, y_train)
+    gb.fit(X_train_os, y_train_os)
+    svm.fit(X_train, y_train)
+
+    # Soft voting: average predicted probabilities
+    p_rf = rf.predict_proba(X_test)
+    p_et = et.predict_proba(X_test)
+    p_gb = gb.predict_proba(X_test)
+    p_svm = svm.predict_proba(X_test)
+
+    # Weighted average (give more weight to tree-based methods)
+    avg_proba = 0.3 * p_rf + 0.25 * p_et + 0.25 * p_gb + 0.2 * p_svm
+    return np.argmax(avg_proba, axis=1)
 
 
 # ── MotionCLIP encoder ──────────────────────────────────────────────────────

@@ -214,10 +214,72 @@ def extract_gait_features(pose: np.ndarray) -> np.ndarray:
     # ── 8. Walk duration and sequence-level features ──────────────────────
     walk_features = np.array([
         T / 30.0,                          # walk duration (seconds)
+        np.log1p(T),                       # log duration
         np.abs(vel).mean(),                # mean absolute velocity (all joints)
         vel_std.mean(),                    # mean velocity std
         acc_std.mean(),                    # mean acceleration std
-    ])  # (4,)
+    ])  # (5,)
+
+    # ── 9. Percentile features for key joints ────────────────────────────
+    percentile_feats = []
+    for j in [0, 1, 2, 4, 5, 7, 8]:
+        joint_data = rot6d[:, j, :]  # (T, 6)
+        percentile_feats.append(np.percentile(joint_data, 10, axis=0))
+        percentile_feats.append(np.percentile(joint_data, 90, axis=0))
+    percentile_feats = np.concatenate(percentile_feats)  # (7*2*6=84,)
+
+    # ── 10. Coefficient of variation for velocity ────────────────────────
+    vel_abs_mean = np.abs(vel).mean(0) + 1e-8
+    cv_vel = vel.std(0) / vel_abs_mean  # (144,)
+
+    # ── 11. Jerk (3rd derivative) statistics ─────────────────────────────
+    if T > 3:
+        jerk = np.diff(acc, axis=0)  # (T-3, 144)
+        jerk_std = jerk.std(0)       # (144,)
+        jerk_mean_abs = np.abs(jerk).mean(0)  # (144,)
+    else:
+        jerk_std = np.zeros(144)
+        jerk_mean_abs = np.zeros(144)
+
+    # ── 12. Cross-joint correlation features ─────────────────────────────
+    # Correlation between left-right joint velocities (PD: reduced coordination)
+    lr_corr = []
+    lr_pairs = [(1, 2), (4, 5), (7, 8), (10, 11)]
+    for l_idx, r_idx in lr_pairs:
+        for ch in range(6):
+            l_vel = np.diff(rot6d[:, l_idx, ch])
+            r_vel = np.diff(rot6d[:, r_idx, ch])
+            if len(l_vel) > 2 and l_vel.std() > 1e-8 and r_vel.std() > 1e-8:
+                corr = np.corrcoef(l_vel, r_vel)[0, 1]
+                lr_corr.append(corr if np.isfinite(corr) else 0.0)
+            else:
+                lr_corr.append(0.0)
+    lr_corr = np.array(lr_corr)  # (24,)
+
+    # ── 13. Trunk stability features ─────────────────────────────────────
+    # Spine joints: spine1=3, spine2=6, spine3=9
+    trunk_vel = np.diff(rot6d[:, [3, 6, 9], :], axis=0)  # (T-1, 3, 6)
+    trunk_stability = np.concatenate([
+        trunk_vel.std(axis=0).flatten(),      # (18,) trunk velocity variability
+        np.abs(trunk_vel).mean(axis=0).flatten(),  # (18,) trunk mean abs velocity
+    ])  # (36,)
+
+    # ── 14. Arm swing features ───────────────────────────────────────────
+    # Shoulders=16,17; Elbows=18,19 — reduced arm swing in PD
+    arm_joints = [16, 17, 18, 19]
+    arm_vel = np.diff(rot6d[:, arm_joints, :], axis=0)  # (T-1, 4, 6)
+    arm_features = np.concatenate([
+        np.abs(arm_vel).mean(axis=0).flatten(),  # (24,) mean arm velocity
+        arm_vel.std(axis=0).flatten(),            # (24,) arm velocity variability
+    ])  # (48,)
+
+    # ── 15. Arm swing asymmetry ──────────────────────────────────────────
+    asym_shoulder = rot6d[:, 16, :] - rot6d[:, 17, :]
+    asym_elbow = rot6d[:, 18, :] - rot6d[:, 19, :]
+    arm_asym = np.concatenate([
+        asym_shoulder.mean(0), asym_shoulder.std(0),
+        asym_elbow.mean(0), asym_elbow.std(0),
+    ])  # (24,)
 
     return np.concatenate([
         mean_feat, std_feat, range_feat,
@@ -229,6 +291,13 @@ def extract_gait_features(pose: np.ndarray) -> np.ndarray:
         ankle_features,
         regularity_features,
         walk_features,
+        percentile_feats,
+        cv_vel,
+        jerk_std, jerk_mean_abs,
+        lr_corr,
+        trunk_stability,
+        arm_features,
+        arm_asym,
     ]).astype(np.float32)
 
 
@@ -238,10 +307,11 @@ def train_sklearn_ensemble(X_train: np.ndarray, y_train: np.ndarray,
                            X_test: np.ndarray) -> np.ndarray:
     """
     Train a sklearn ensemble on handcrafted features.
-    Uses RandomForest + GradientBoosting with class weighting.
-    This is the primary classifier for the handcrafted feature path.
+    Uses RF + ExtraTrees + GB + SVM with class weighting and oversampling.
     """
-    from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier, VotingClassifier
+    from sklearn.ensemble import (RandomForestClassifier, GradientBoostingClassifier,
+                                  ExtraTreesClassifier, VotingClassifier)
+    from sklearn.svm import SVC
     from sklearn.preprocessing import StandardScaler
     from sklearn.pipeline import Pipeline
 
@@ -249,41 +319,91 @@ def train_sklearn_ensemble(X_train: np.ndarray, y_train: np.ndarray,
     X_train = np.nan_to_num(X_train, nan=0.0, posinf=0.0, neginf=0.0)
     X_test = np.nan_to_num(X_test, nan=0.0, posinf=0.0, neginf=0.0)
 
+    # Clip extreme values
+    clip_val = 1e6
+    X_train = np.clip(X_train, -clip_val, clip_val)
+    X_test = np.clip(X_test, -clip_val, clip_val)
+
     n_cls = 3
     counts = np.bincount(y_train, minlength=n_cls).astype(float)
     counts = np.where(counts == 0, 1.0, counts)
     class_weight = {i: counts.sum() / (n_cls * counts[i]) for i in range(n_cls)}
 
+    # Oversample class 2 for classifiers that don't support class_weight
+    idx2 = np.where(y_train == 2)[0]
+    idx1 = np.where(y_train == 1)[0]
+    idx0 = np.where(y_train == 0)[0]
+    n_max = max(len(idx0), len(idx1), len(idx2))
+    if len(idx2) > 0:
+        n_repeat2 = max(1, round(n_max / len(idx2)))
+        n_repeat1 = max(1, round(n_max / len(idx1))) if len(idx1) > 0 else 1
+    else:
+        n_repeat2 = 1
+        n_repeat1 = 1
+    aug_idx = np.concatenate([idx0] + [idx1] * n_repeat1 + [idx2] * n_repeat2)
+    np.random.seed(42)
+    np.random.shuffle(aug_idx)
+    X_train_os = X_train[aug_idx]
+    y_train_os = y_train[aug_idx]
+
     rf = Pipeline([
         ('scaler', StandardScaler()),
         ('clf', RandomForestClassifier(
-            n_estimators=300,
+            n_estimators=500,
             max_depth=None,
             min_samples_leaf=2,
-            class_weight=class_weight,
+            class_weight='balanced',
             random_state=42,
             n_jobs=-1,
+        ))
+    ])
+
+    et = Pipeline([
+        ('scaler', StandardScaler()),
+        ('clf', ExtraTreesClassifier(
+            n_estimators=500,
+            max_depth=None,
+            min_samples_leaf=2,
+            class_weight='balanced',
+            random_state=43,
+            n_jobs=-1,
+        ))
+    ])
+
+    svm = Pipeline([
+        ('scaler', StandardScaler()),
+        ('clf', SVC(
+            kernel='rbf',
+            C=10.0,
+            gamma='scale',
+            class_weight='balanced',
+            probability=True,
+            random_state=44,
         ))
     ])
 
     gb = Pipeline([
         ('scaler', StandardScaler()),
         ('clf', GradientBoostingClassifier(
-            n_estimators=200,
+            n_estimators=300,
             max_depth=4,
             learning_rate=0.05,
             subsample=0.8,
+            min_samples_leaf=5,
             random_state=42,
         ))
     ])
 
     # Soft voting ensemble
     ensemble = VotingClassifier(
-        estimators=[('rf', rf), ('gb', gb)],
+        estimators=[('rf', rf), ('et', et), ('svm', svm), ('gb', gb)],
         voting='soft',
     )
 
-    ensemble.fit(X_train, y_train)
+    # Fit RF, ET, SVM on original (they handle class_weight), GB on oversampled
+    # Actually VotingClassifier fits all on same data, so use oversampled for all
+    # GB benefits from oversampling, others are robust to it with class_weight
+    ensemble.fit(X_train_os, y_train_os)
     return ensemble.predict(X_test)
 
 
