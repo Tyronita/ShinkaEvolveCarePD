@@ -1,0 +1,60 @@
+<NAME>
+add_bilateral_cross_correlation_features
+</NAME>
+
+<DESCRIPTION>
+Bilateral coordination breakdown is a hallmark of severe Parkinson's disease, especially in gait. While the current model includes L-R asymmetry features (mean/std of joint rotation differences), it lacks explicit modeling of temporal coordination between limbs. 
+
+The proposed change adds bilateral cross-correlation features between homologous joints (hips, knees, ankles) at three temporal lags (-5, 0, +5 frames), capturing both in-phase and anti-phase coordination patterns. These 54 features (3 joint pairs × 3 lags × 6 rotation components) directly target the temporal asymmetry that characterizes severe PD gait. 
+
+Additionally, we add 6 features measuring the ratio of pelvis-to-ankle rotation variance across all 6 rotation components, serving as a proximal-distal coupling proxy. Severe PD patients exhibit reduced trunk-ankle coordination, making this ratio discriminative.
+
+These features specifically address the severe class under-prediction (currently 0.44 F1) by providing direct measures of inter-limb coordination breakdown, which is more pronounced in severe PD than in mild cases.
+</DESCRIPTION>
+
+<DIFF>
+<<<<<<< SEARCH
+    # D. ROM for all lower-body joints (not just selected)
+    for j in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]:
+        rom = rot6d[:, j, :].max(0) - rot6d[:, j, :].min(0)
+        features.append(rom)  # (6,)
+
+    return np.concatenate([f.ravel() for f in features])
+=======
+    # D. ROM for all lower-body joints (not just selected)
+    for j in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]:
+        rom = rot6d[:, j, :].max(0) - rot6d[:, j, :].min(0)
+        features.append(rom)  # (6,)
+
+    # E. Bilateral cross-correlation at multiple lags - captures coordination breakdown in severe PD
+    joint_pairs = [(1,2), (4,5), (7,8)]  # (L_hip,R_hip), (L_knee,R_knee), (L_ankle,R_ankle)
+    lags = [-5, 0, 5]  # frames (approx -0.17s, 0, +0.17s at 30fps)
+    
+    for l_idx, r_idx in joint_pairs:
+        for lag in lags:
+            for ch in range(6):  # all 6 rotation components
+                l_sig = rot6d[:, l_idx, ch]
+                r_sig = rot6d[:, r_idx, ch]
+                # Normalize signals
+                l_sig = (l_sig - l_sig.mean()) / (l_sig.std() + 1e-8)
+                r_sig = (r_sig - r_sig.mean()) / (r_sig.std() + 1e-8)
+                # Compute cross-correlation and shift for lag
+                corr = np.correlate(l_sig, r_sig, mode='full')
+                # Shift index to get lag (center is len(corr)//2)
+                center = len(corr) // 2
+                corr_idx = center + lag
+                if 0 <= corr_idx < len(corr):
+                    features.append(np.array([corr[corr_idx]]))
+                else:
+                    features.append(np.array([0.0]))
+
+    # F. Proximal-distal coupling ratio: pelvis vs ankle rotation variance
+    for ch in range(6):
+        pelvis_var = rot6d[:, 0, ch].var()
+        ankle_var = (rot6d[:, 7, ch].var() + rot6d[:, 8, ch].var()) / 2.0
+        ratio = pelvis_var / (ankle_var + 1e-8)
+        features.append(np.array([ratio]))
+
+    return np.concatenate([f.ravel() for f in features])
+>>>>>>> REPLACE
+</DIFF>

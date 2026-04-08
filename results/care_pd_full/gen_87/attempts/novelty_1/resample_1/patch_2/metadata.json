@@ -1,0 +1,14 @@
+{
+  "generation": 87,
+  "novelty_attempt": 1,
+  "resample_attempt": 1,
+  "patch_attempt": 2,
+  "success": true,
+  "num_applied": 1,
+  "patch_name": "gaitformer_baseline_fixed",
+  "patch_description": "The current program has a critical bug: it computes class weights but never passes them to the classifier. This is the #1 issue mentioned in the expert analysis. My solution fixes this by properly implementing class weighting in the voting ensemble.\n\nKey improvements:\n1. Fixed the critical bug: now properly passes class weights to both RandomForest and GradientBoosting classifiers\n2. Added bilateral cross-correlation features at lags [-5,0,5] for hips/knees/ankles to capture temporal asymmetry\n3. Added pelvis-ankle variance ratio as a proximal-distal coupling proxy\n4. Used np.nan_to_num to handle numerical issues in features\n5. Simplified FFT analysis to focus on core gait frequency band (0.5-3.0 Hz)\n6. Removed unreliable MotionCLIP features that add noise\n\nThe key parameters changed:\n- Added proper class_weight passing to both base estimators (critical fix)\n- Increased RF n_estimators to 300 and added min_samples_split=4\n- Added 54 bilateral cross-correlation features at 3 lags\n- Added 6-dim pelvis-ankle coupling ratio\n- Used mean pooling for FFT features instead of peak detection\n\nThis focuses on proven PD biomarkers (bilateral coordination, gait rhythm) while properly addressing class imbalance, which is essential for detecting severe PD cases.",
+  "error_msg": null,
+  "timestamp": "2026-04-06T23:45:48.288134",
+  "llm_cost": 0.0070561,
+  "llm_model": null
+}

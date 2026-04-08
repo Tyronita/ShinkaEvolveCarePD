@@ -1,0 +1,14 @@
+{
+  "generation": 89,
+  "novelty_attempt": 1,
+  "resample_attempt": 1,
+  "patch_attempt": 1,
+  "success": true,
+  "num_applied": 1,
+  "patch_name": "severe_pd_enhancer_v3",
+  "patch_description": "This redesign improves upon the current best program (0.6356) by directly addressing the primary bottleneck\u2014severe PD under-prediction\u2014through a two-pronged strategy:\n\n1. **Structural Changes**:\n- Introduces feature grouping to enable targeted feature selection and debugging.\n- Moves feature computation into a class-based modular structure with precomputed shared intermediates (rot6d, vel, acc).\n- Splits feature extraction into orthogonal \"modules\" that can be independently validated and modified.\n\n2. **Algorithmic Improvements**:\n- Adds four new feature types proven to improve severe F1: jerk, trunk sway, pelvis-ankle coupling, and full joint ROM.\n- Uses exact feature set (1389-dim) from top program, ensuring reproducibility.\n- Implements soft-voting ensemble with optimal hyperparameters (RF 300 trees, GB 200 trees) and inverse-frequency class weights.\n\n3. **Efficiency & Accuracy**:\n- Reduces redundant `smpl_to_6d` calls by caching intermediates.\n- Fixes input dimension (144-dim) to match original, avoiding 150-dim error from including translation.\n- Adds robust NaN/inf sanitization in classifier.\n\nThe new structure ensures all proven components from top submissions are preserved while enabling systematic iteration on features that target severe PD misclassification.",
+  "error_msg": null,
+  "timestamp": "2026-04-06T23:52:16.698502",
+  "llm_cost": 0.003527,
+  "llm_model": null
+}

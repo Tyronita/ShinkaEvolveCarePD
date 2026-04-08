@@ -1,0 +1,14 @@
+{
+  "generation": 79,
+  "novelty_attempt": 1,
+  "resample_attempt": 1,
+  "patch_attempt": 1,
+  "success": true,
+  "num_applied": 1,
+  "patch_name": "calibrated_rf_gb_ensemble_v3",
+  "patch_description": "Key structural improvements over prior programs:\n\n1. **Critical calibration fix**: The #1 performance bottleneck was poorly calibrated RF probabilities for the severe class. This version wraps the RF pipeline with `CalibratedClassifierCV(method='isotonic', cv=3)` - the single change that boosted macro-F1 from 0.6356 to 0.6551 in top programs. This corrects RF's systematic underestimation of severe PD cases.\n\n2. **Optimized RF hyperparameters**: Uses `n_estimators=500` (vs 300) and `min_samples_leaf=1` (vs 2) to create a larger, deeper forest that provides better probability estimates for calibration to work on.\n\n3. **Proven 1389-dim feature vector**: Reverts to the exact feature extraction code from the 0.6551 program that includes velocity/acceleration stats, asymmetry, FFT, and autocorrelation features - proven superior to newer variants.\n\n4. **Simplified ensemble**: Removes experimental components (XGBoost, SVC) and uses the proven RF+GB soft-voting ensemble. GB is kept uncalibrated as its probabilities are naturally well-calibrated.\n\n5. **MotionCLIP with graceful fallback**: Maintains the multi-window mean pooling approach with try/except handling so the program runs even if the checkpoint is unavailable.\n\nThese changes directly address the severe class under-prediction (56 cases misclassified as normal) by improving probability calibration while maintaining the proven feature engineering that captures PD-specific gait biomarkers.",
+  "error_msg": null,
+  "timestamp": "2026-04-06T23:09:00.687938",
+  "llm_cost": 0.006354800000000001,
+  "llm_model": null
+}

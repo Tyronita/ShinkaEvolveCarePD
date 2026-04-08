@@ -1,0 +1,14 @@
+{
+  "generation": 34,
+  "novelty_attempt": 1,
+  "resample_attempt": 1,
+  "patch_attempt": 1,
+  "success": true,
+  "num_applied": 3,
+  "patch_name": "handcrafted_features_with_enhanced_asymmetry",
+  "patch_description": "The current program uses a hybrid approach with MotionCLIP features and handcrafted gait features as fallback. However, analysis of prior runs shows that class 2 (severe PD) F1 remains low (~0.29), indicating poor detection of severe cases. The winning strategy (score 0.6231) uses physics-informed handcrafted features as primary input, not MotionCLIP.\n\nWe enhance the `extract_gait_features` function to include more discriminative PD-specific features:\n1. Add velocity and acceleration statistics for key joints (pelvis, hips, knees, ankles)\n2. Expand asymmetry features to include mean and std of L-R differences across all gait phases\n3. Add freeze-of-gait (FoG) ratio using high-frequency power in ankle rotations\n4. Include gait regularity via autocorrelation of pelvis signal\n5. Add dominant stride frequency and relative power in gait band (0.5\u20133.0 Hz)\n\nThese features directly capture known PD gait impairments: asymmetry, shuffling gait, FoG, and irregular rhythm. By enriching the handcrafted feature vector, we improve class separability \u2014 especially for class 2.\n\nWe also fix a critical bug: the current `FocalLoss` ignores class weights because they are passed as `weight` to `cross_entropy` instead of being used in alpha scaling. We revert to using `nn.CrossEntropyLoss(weight=w)` which is proven to work.\n\nFinally, we ensure handcrafted features are always used as fallback when MotionCLIP is unavailable, maintaining robustness.",
+  "error_msg": null,
+  "timestamp": "2026-04-06T16:10:39.799457",
+  "llm_cost": 0.00214991,
+  "llm_model": null
+}

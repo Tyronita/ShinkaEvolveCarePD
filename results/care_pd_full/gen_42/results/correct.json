@@ -1,0 +1,4 @@
+{
+    "correct": false,
+    "error": "Traceback (most recent call last):\n  File \"/workspace/ShinkaEvolveCarePD/results/care_pd_full/evaluate.py\", line 211, in main\n    result = mod.run_evaluation(data=data, folds=folds, care_pd_dir=_CARE_PD)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/ShinkaEvolveCarePD/results/care_pd_full/gen_42/main.py\", line 419, in run_evaluation\n    preds = train_and_predict(tr_poses, y_tr, te_poses, care_pd_dir=care_pd_dir)\n            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/ShinkaEvolveCarePD/results/care_pd_full/gen_42/main.py\", line 365, in train_and_predict\n    clf = Pipeline([\n          ^^^^^^^^\nNameError: name 'Pipeline' is not defined\n"
+}

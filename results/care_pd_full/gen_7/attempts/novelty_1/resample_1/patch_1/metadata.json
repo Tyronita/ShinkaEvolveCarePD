@@ -1,0 +1,14 @@
+{
+  "generation": 7,
+  "novelty_attempt": 1,
+  "resample_attempt": 1,
+  "patch_attempt": 1,
+  "success": true,
+  "num_applied": 2,
+  "patch_name": "multiwindow_weighted_loss_improved_classifier",
+  "patch_description": "Three key improvements:\n1. Multi-window feature extraction: Instead of a single center-crop, slide multiple overlapping 60-frame windows across the full walk and average the MotionCLIP embeddings. This captures the full gait pattern rather than just the middle portion.\n2. Weighted CrossEntropy loss with strong inverse-frequency weights for class 2 (severe), replacing FocalLoss which wasn't helping class 2 at all (F1=0.00).\n3. Improved MLP classifier with LayerNorm, residual connections, and more training epochs with a better learning rate schedule.",
+  "error_msg": null,
+  "timestamp": "2026-04-06T12:45:52.899406",
+  "llm_cost": 0.076491,
+  "llm_model": null
+}

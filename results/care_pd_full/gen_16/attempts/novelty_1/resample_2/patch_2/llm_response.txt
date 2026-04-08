@@ -1,0 +1,136 @@
+**Addressing Performance Needs**
+
+I'm now focused on rewriting the Python program for better performance, building from our prior attempt. It looks like the issue last time stemmed from a formatting problem during the code extraction, so I'm paying extra attention to that now. I'll focus on efficiency.
+
+
+**Refining Extraction Precision**
+
+I'm now zeroing in on the importance of code block formatting to fix the performance problems from before. I've analyzed the issues and the user's suggestions. A misstep from our previous attempt appears to have been caused by extracting from the code block incorrectly. I must remember to include the calculated weights in the `FocalLoss` function, and oversample class 2.
+
+
+**Prioritizing Architectural Strategy**
+
+I'm now zeroing in on a new approach, prioritizing a new architectural design. The previous attempt's failure highlighted formatting missteps, so I'm focusing on a robust architecture that bypasses the broken PyTorch loop altogether. My primary strategy is to implement Architecture A, leveraging handcrafted features and a `SVC` classifier with balanced class weights. The small dataset strongly favors this path, and it elegantly handles the class imbalance issue. I've re-reviewed the options; this is the optimal path.
+
+
+**Formulating Strategic Rewrite**
+
+I'm now prioritizing rewriting the Python program by formulating a robust new strategy. I must address the underlying bug in the prior attempts, which includes both a formatting issue and an incorrect `FocalLoss` function that did not take class weights. My plan is to fix the core issues of zero-class 2 classification and low F1. My top strategy is to implement Architecture A, which involves handcrafted features with an SVC classifier. This simplifies the code significantly by bypassing the broken PyTorch training loop and directly addresses the class imbalance issue. I'll remove unnecessary code related to MotionCLIP and implement a new `train_and_predict` function for the chosen architecture.
+
+
+**Prioritizing Code Restructuring**
+
+I'm now focusing on a complete Python program restructure. The previous issue stemmed from an incorrect code extraction, so I will rewrite the code from scratch, using a new architecture. My main strategy will be to implement Architecture A, focusing on handcrafted features and SVC. I've analyzed the problem in-depth, and this architectural shift promises optimal performance.
+
+
+**Implementing Architecture A**
+
+I am now implementing Architecture A, focusing on a robust approach that uses handcrafted features with an SVC classifier. It directly addresses the class imbalance and small dataset issues that plagued our previous attempts. The code extraction error highlighted a need for this strategy. I am building the code. I am now formulating the description, the name, and the code.
+
+
+**Formulating New Strategy**
+
+I'm now formulating a new strategic approach focused on fixing the main bug, which is the incorrect loss function. Architecture A looks ideal because it completely sidesteps the PyTorch loop, allowing me to implement a simple `SVC` classifier with balanced weights. My strategy involves removing the previous incorrect code related to MotionCLIP and the PyTorch model and implementing Architecture A. I will focus on handcrafted features and SVC. I've re-reviewed the options and this is optimal given the dataset.
+
+
+
+**Implementing Architecture A**
+
+I am now implementing Architecture A using handcrafted features with an SVC classifier and balanced weights to fix the misstep from before. This is the optimal path given the dataset, which is small, and class imbalanced. I am implementing the code.
+
+```python
+#Imports to add
+from sklearn.svm import SVC
+from sklearn.preprocessing import StandardScaler
+from sklearn.pipeline import Pipeline
+# Imports to remove
+# import torch
+# import torch.nn as nn
+# import torch.optim as optim
+
+import numpy as np
+import scipy
+from scipy.spatial.transform import Rotation as R
+
+DEVICE = "cpu"
+
+def _aa_to_quat(aa):
+    """
+    Convert axis-angle representation to quaternion.
+    """
+    rot = R.from_rotvec(aa).as_quat()
+    return rot
+
+def _quat_to_mat(q):
+    """
+    Convert quaternion to rotation matrix.
+    """
+    rot = R.from_quat(q).as_matrix()
+    return rot
+
+def _mat_to_6d(mat):
+    """
+    Convert rotation matrix to 6D vector representation.
+    """
+    a = mat[:, 0]
+    b = mat[:, 1]
+    return np.concatenate([a, b])
+
+def smpl_to_6d(pose: np.ndarray) -> np.ndarray:
+    """
+    Convert SMPL pose representation (axis-angle) to 6D vector representation.
+
+    pose: (N, 72)
+    """
+    num_frames = pose.shape[0]
+    result = np.zeros((num_frames, 24, 6))  # 24 joints, 6D representation
+
+    for i in range(24):
+        aa = pose[:, i * 3:(i + 1) * 3]
+        quat = _aa_to_quat(aa)
+        rot_mat = _quat_to_mat(quat)
+        result[:, i] = _mat_to_6d(rot_mat)
+    return result.reshape(num_frames, -1)  # Flatten the last two dimensions
+
+def extract_gait_features(pose: np.ndarray) -> np.ndarray:
+  """
+  Extract gait features from SMPL pose data.
+  """
+  # Convert SMPL pose to 6D representation
+  pose_6d = smpl_to_6d(pose)
+
+  # Calculate velocities
+  velocities = np.diff(pose_6d, axis=0)
+  velocities = np.nan_to_num(velocities)  # Handle potential NaN values
+
+  # Calculate average velocity across the body (all joints)
+  avg_velocity = np.mean(np.linalg.norm(velocities, axis=1), axis=1)
+
+  # Calculate asymmetry (e.g., difference between left and right leg movements)
+  # This is a simplified example; a real implementation would be more sophisticated.
+  left_leg_indices = np.array([2, 5, 8, 11, 14, 17]) * 6  # 6D representation
+  right_leg_indices = np.array([3, 6, 9, 12, 15, 18]) * 6
+
+  left_leg_velocity = np.mean(np.linalg.norm(velocities[:, left_leg_indices], axis=1), axis=1)
+  right_leg_velocity = np.mean(np.linalg.norm(velocities[:, right_leg_indices], axis=1), axis=1)
+  asymmetry = np.abs(left_leg_velocity - right_leg_velocity)
+  # Frequency can be estimated from the periodicity of joint movements.
+  # Simplest approach: count zero-crossings (very basic)
+  zero_crossings = np.sum(np.diff(np.sign(velocities), axis=0) != 0, axis=0)
+  frequency = zero_crossings / pose_6d.shape[0]  # crossings per frame
+
+  # Combine features
+  features = np.column_stack([
+      avg_velocity,
+      asymmetry,
+      frequency
+  ])
+
+  # Handle potential NaN or infinite values
+  features = np.nan_to_num(features)
+
+  # Average features over the entire sequence
+  return np.mean(features, axis=0) # Aggregate features
+
+def train_and_predict(train_poses: list, y_train: np.ndarray,
+

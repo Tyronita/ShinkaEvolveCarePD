@@ -1,0 +1,166 @@
+<NAME>
+add_jerk_features_for_pd_irregularity
+</NAME>
+
+<DESCRIPTION>
+Jerk (the third derivative of position) is a sensitive biomechanical marker for movement disorders like Parkinson's Disease, capturing the characteristic "start-stop" or "tremulous" gait patterns in severe cases. The current feature set includes velocity and acceleration but stops at the second derivative. Adding jerk features specifically for the pelvis, hips, and ankles (key joints affected in PD) will provide the classifier with more discriminative signals for the severe class. This change directly addresses the bottleneck where 56+34=90 severe cases are misclassified (mostly as normal), as jerkiness is a hallmark of advanced PD gait. The implementation computes the absolute mean and std of jerk for these joints, appending 108 new dimensions to the feature vector. This is a targeted, low-risk enhancement grounded in clinical gait analysis.
+</DESCRIPTION>
+
+<DIFF>
+<<<<<<< SEARCH
+    # 3. Acceleration stats (432-dim) — captures PD tremor/rigidity
+    if T > 2:
+        acc = np.diff(vel, axis=0)
+        features.append(acc.mean(0))
+        features.append(acc.std(0))
+        features.append(np.abs(acc).mean(0))
+    else:
+        features.extend([np.zeros(144)] * 3)
+
+    # 4. Left-right asymmetry (48-dim) — key PD marker
+=======
+    # 3. Acceleration stats (432-dim) — captures PD tremor/rigidity
+    if T > 2:
+        acc = np.diff(vel, axis=0)
+        features.append(acc.mean(0))
+        features.append(acc.std(0))
+        features.append(np.abs(acc).mean(0))
+    else:
+        features.extend([np.zeros(144)] * 3)
+
+    # 4. Jerk (3rd derivative) stats for key joints — captures PD-specific movement irregularity
+    if T > 3:
+        jerk = np.diff(acc, axis=0)  # (T-3, 144)
+        # Jerk stats for pelvis (dims 0:6), hips (6:18), ankles (42:54)
+        for j_slice in [slice(0,6), slice(6,18), slice(42,54)]:
+            j_seg = jerk[:, j_slice]
+            features.append(np.abs(j_seg).mean(0))  # mean absolute jerk
+            features.append(j_seg.std(0))
+    else:
+        for j_slice in [slice(0,6), slice(6,18), slice(42,54)]:
+            n = j_slice.stop - j_slice.start
+            features.extend([np.zeros(n), np.zeros(n)])
+
+    # 5. Left-right asymmetry (48-dim) — key PD marker
+>>>>>>> REPLACE
+</DIFF>
+<DIFF>
+<<<<<<< SEARCH
+    # 4. Left-right asymmetry (48-dim) — key PD marker
+    asym_pairs = [(1,2), (4,5), (7,8), (10,11)]  # hip, knee, ankle, foot
+    for l_idx, r_idx in asym_pairs:
+        diff = rot6d[:, l_idx, :] - rot6d[:, r_idx, :]
+        features.append(diff.mean(0))
+        features.append(diff.std(0))
+
+    # 5. Per-joint velocity for 9 key joints (108-dim)
+=======
+    # 4. Left-right asymmetry (48-dim) — key PD marker
+    asym_pairs = [(1,2), (4,5), (7,8), (10,11)]  # hip, knee, ankle, foot
+    for l_idx, r_idx in asym_pairs:
+        diff = rot6d[:, l_idx, :] - rot6d[:, r_idx, :]
+        features.append(diff.mean(0))
+        features.append(diff.std(0))
+
+    # 5. Per-joint velocity for 9 key joints (108-dim)
+>>>>>>> REPLACE
+</DIFF>
+<DIFF>
+<<<<<<< SEARCH
+    # 5. Per-joint velocity for 9 key joints (108-dim)
+    key_joints = [0, 1, 2, 4, 5, 7, 8, 10, 11]
+    if T > 1:
+        joint_vel = np.diff(rot6d[:, :24, :], axis=0)
+        for j in key_joints:
+            jv = joint_vel[:, j, :]
+            features.append(jv.mean(0))
+            features.append(jv.std(0))
+    else:
+        features.extend([np.zeros(6)] * 18)
+
+    # 6. FFT frequency features (27-dim) — stride frequency, freezing proxy
+=======
+    # 6. Per-joint velocity for 9 key joints (108-dim)
+    key_joints = [0, 1, 2, 4, 5, 7, 8, 10, 11]
+    if T > 1:
+        joint_vel = np.diff(rot6d[:, :24, :], axis=0)
+        for j in key_joints:
+            jv = joint_vel[:, j, :]
+            features.append(jv.mean(0))
+            features.append(jv.std(0))
+    else:
+        features.extend([np.zeros(6)] * 18)
+
+    # 7. FFT frequency features (27-dim) — stride frequency, freezing proxy
+>>>>>>> REPLACE
+</DIFF>
+<DIFF>
+<<<<<<< SEARCH
+    # 8. Duration (2-dim)
+    features.append(np.array([T / 30.0, np.log1p(T)]))
+
+    # === EXTEND WITH NEW FEATURES BELOW TO IMPROVE SEVERE CLASS F1 ===
+    # Suggested additions (add any/all of these):
+
+    # A. Jerk (3rd derivative) for key joints — captures PD-specific movement irregularity
+    if T > 3:
+        jerk = np.diff(acc, axis=0)  # (T-3, 144)
+        # Jerk stats for pelvis (dims 0:6), hips (6:18), ankles (42:54)
+        for j_slice in [slice(0,6), slice(6,18), slice(42,54)]:
+            j_seg = jerk[:, j_slice]
+            features.append(np.abs(j_seg).mean(0))  # mean absolute jerk
+            features.append(j_seg.std(0))
+    else:
+        for j_slice in [slice(0,6), slice(6,18), slice(42,54)]:
+            n = j_slice.stop - j_slice.start
+            features.extend([np.zeros(n), np.zeros(n)])
+
+    # B. Trunk sway: pelvis lateral rotation variance (large in severe PD)
+    pelvis_lateral = rot6d[:, 0, 2]  # lateral tilt component
+    features.append(np.array([pelvis_lateral.std(), np.abs(pelvis_lateral).mean()]))
+
+    # C. Pelvis-ankle coupling: cross-correlation peak
+    for ankle_j in [7, 8]:
+        if T > 1:
+            p_sig = rot6d[:, 0, 0] - rot6d[:, 0, 0].mean()
+            a_sig = rot6d[:, ankle_j, 0] - rot6d[:, ankle_j, 0].mean()
+            p_norm = np.linalg.norm(p_sig) + 1e-8
+            a_norm = np.linalg.norm(a_sig) + 1e-8
+            xc = np.correlate(p_sig/p_norm, a_sig/a_norm, mode='full')
+            features.append(np.array([xc.max(), np.abs(xc).mean()]))
+        else:
+            features.append(np.zeros(2))
+
+    # D. ROM for all lower-body joints (not just selected)
+    for j in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]:
+        rom = rot6d[:, j, :].max(0) - rot6d[:, j, :].min(0)
+        features.append(rom)  # (6,)
+=======
+    # 8. Duration (2-dim)
+    features.append(np.array([T / 30.0, np.log1p(T)]))
+
+    # === EXTEND WITH NEW FEATURES BELOW TO IMPROVE SEVERE CLASS F1 ===
+    # Suggested additions (add any/all of these):
+
+    # B. Trunk sway: pelvis lateral rotation variance (large in severe PD)
+    pelvis_lateral = rot6d[:, 0, 2]  # lateral tilt component
+    features.append(np.array([pelvis_lateral.std(), np.abs(pelvis_lateral).mean()]))
+
+    # C. Pelvis-ankle coupling: cross-correlation peak
+    for ankle_j in [7, 8]:
+        if T > 1:
+            p_sig = rot6d[:, 0, 0] - rot6d[:, 0, 0].mean()
+            a_sig = rot6d[:, ankle_j, 0] - rot6d[:, ankle_j, 0].mean()
+            p_norm = np.linalg.norm(p_sig) + 1e-8
+            a_norm = np.linalg.norm(a_sig) + 1e-8
+            xc = np.correlate(p_sig/p_norm, a_sig/a_norm, mode='full')
+            features.append(np.array([xc.max(), np.abs(xc).mean()]))
+        else:
+            features.append(np.zeros(2))
+
+    # D. ROM for all lower-body joints (not just selected)
+    for j in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]:
+        rom = rot6d[:, j, :].max(0) - rot6d[:, j, :].min(0)
+        features.append(rom)  # (6,)
+>>>>>>> REPLACE
+</DIFF>

@@ -1,0 +1,14 @@
+{
+  "generation": 92,
+  "novelty_attempt": 1,
+  "resample_attempt": 1,
+  "patch_attempt": 1,
+  "success": true,
+  "num_applied": 1,
+  "patch_name": "calibrate_gradient_boosting",
+  "patch_description": "The current ensemble uses GradientBoostingClassifier directly in a soft-voting scheme, but its predicted probabilities are often miscalibrated, especially for the minority severe class (UPDRS=2). This causes the soft voter to underweight GB's predictions for severe cases, biasing the ensemble toward normal/mild predictions. By wrapping both ensemble members in CalibratedClassifierCV with isotonic regression, we ensure both RF and GB contribute well-calibrated class probabilities before soft averaging. This is particularly critical for class 2, where even small improvements in calibration can reduce misclassification as mild or normal. The change mirrors the successful calibration of RF and applies it uniformly to both base estimators.",
+  "error_msg": null,
+  "timestamp": "2026-04-07T00:05:25.526518",
+  "llm_cost": 0.002199599,
+  "llm_model": null
+}

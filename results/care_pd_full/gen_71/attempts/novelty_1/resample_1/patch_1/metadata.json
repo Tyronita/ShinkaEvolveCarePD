@@ -1,0 +1,14 @@
+{
+  "generation": 71,
+  "novelty_attempt": 1,
+  "resample_attempt": 1,
+  "patch_attempt": 1,
+  "success": true,
+  "num_applied": 1,
+  "patch_name": "gait_ensemble_crossover_v3",
+  "patch_description": "This crossover combines the best elements from all prior programs:\n\n1. **Feature extraction**: Uses the proven 1389-dim base feature set (global rotation stats, velocity, acceleration, L-R asymmetry, per-joint velocity, FFT, autocorrelation, duration) from the 0.64-scoring program, which is the best performing baseline. Then adds targeted extensions for severe PD discrimination:\n   - Jerk (3rd derivative) for key joint groups only (not full 144-dim to avoid noise)\n   - Trunk sway (pelvis lateral rotation variance)\n   - Pelvis-ankle cross-correlation\n   - ROM for all lower-body joints\n   \n2. **Classifier**: Uses the proven RF(300 trees, min_samples_leaf=2, inverse-frequency class_weight) + GB(200 trees, max_depth=4, lr=0.05, subsample=0.8) soft-voting ensemble from the 0.64-scoring program. The 3x severe class boost and 500-tree RF from other variants hurt performance (overfitting). The standard inverse-frequency weights are more stable.\n\n3. **No MotionCLIP**: Removed to save compute time (1100s+ overhead for marginal/no gain). Focus compute budget on better features.\n\n4. **Key insight**: The 0.64 program uses standard inverse-frequency weights and 300 RF trees with min_samples_leaf=2, which prevents overfitting on the small severe class. The crossover inspiration with 3x severe weight and 500 trees scored only 0.61 despite more compute.",
+  "error_msg": null,
+  "timestamp": "2026-04-06T21:43:14.931305",
+  "llm_cost": 0.24507299999999999,
+  "llm_model": null
+}

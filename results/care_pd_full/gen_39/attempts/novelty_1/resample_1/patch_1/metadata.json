@@ -1,0 +1,14 @@
+{
+  "generation": 39,
+  "novelty_attempt": 1,
+  "resample_attempt": 1,
+  "patch_attempt": 1,
+  "success": true,
+  "num_applied": 1,
+  "patch_name": "hybrid_features_sklearn_ensemble",
+  "patch_description": "The previous program underperforms because it relies solely on an MLP classifier with FocalLoss, which is suboptimal for small, imbalanced datasets. The key insights are:\n\n1. MotionCLIP features alone are insufficient (best score 0.41) - they need to be combined with handcrafted gait features\n2. sklearn classifiers (RandomForest, GradientBoosting) outperform MLPs on this task (baseline 0.565)\n3. The severe class (UPDRS=2) is critically underrepresented (164 samples) and requires proper handling\n\nThe new approach:\n- Combines MotionCLIP embeddings with comprehensive handcrafted gait features\n- Uses a VotingClassifier ensemble of GradientBoosting and SVC with class_weight='balanced'\n- Implements proper feature scaling with StandardScaler\n- Falls back to handcrafted features only if MotionCLIP fails\n- Extracts rich gait biomarkers: asymmetry, stride frequency, regularity, jerkiness\n\nThis hybrid approach leverages both deep motion representations and clinically relevant gait features, addressing the limitations of pure neural network approaches on this small, imbalanced dataset.",
+  "error_msg": null,
+  "timestamp": "2026-04-06T17:07:05.381733",
+  "llm_cost": 0.0062031,
+  "llm_model": null
+}

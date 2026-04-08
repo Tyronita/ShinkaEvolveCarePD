@@ -1,0 +1,14 @@
+{
+  "generation": 28,
+  "novelty_attempt": 1,
+  "resample_attempt": 1,
+  "patch_attempt": 1,
+  "success": true,
+  "num_applied": 5,
+  "patch_name": "hybrid_features_sklearn_ensemble",
+  "patch_description": "The current program uses MotionCLIP features (0.41 macro-F1) but still underperforms the RandomForest baseline (0.565). Analysis shows that handcrafted gait features with sklearn classifiers are the only approach that can surpass this baseline. The key insight is to combine both: use MotionCLIP when available, but always include handcrafted features as primary discriminative signals.\n\nThe proposed change:\n1. Creates a hybrid feature vector by concatenating MotionCLIP embeddings with comprehensive handcrafted gait features\n2. Replaces the MLP classifier with a sklearn GradientBoostingClassifier + SVC ensemble that uses class_weight='balanced'\n3. Adds proper StandardScaler preprocessing\n4. Maintains mean pooling (not attention) for MotionCLIP as it's more stable\n5. Keeps oversampling for neural network fallback but makes sklearn the primary path\n\nThis addresses the core failure: MotionCLIP features alone are insufficient for PD severity classification. The frozen encoder was pretrained on diverse motions, not PD-specific gait patterns. Handcrafted features capture PD-relevant signals (asymmetry, rigidity, bradykinesia) that MotionCLIP misses.",
+  "error_msg": null,
+  "timestamp": "2026-04-06T15:40:53.843075",
+  "llm_cost": 0.002286003,
+  "llm_model": null
+}

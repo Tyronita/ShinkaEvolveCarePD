@@ -1,0 +1,34 @@
+<NAME>
+fix_unused_class_weights
+</NAME>
+
+<DESCRIPTION>
+The current program computes inverse-frequency class weights to handle the imbalanced dataset (class 2 has only 164 samples vs 341 for class 0), but completely fails to use them in the loss function. The `w` tensor is calculated in `train_classifier()` but never passed to `FocalLoss`. This is a critical bug, especially since class 2 (severe PD) has F1=0.00, indicating it's being ignored.
+
+Instead of relying on FocalLoss alone, we should use a loss that explicitly incorporates the computed class weights. The CARE-PD framework provides WCELoss (Weighted Cross Entropy), but even standard nn.CrossEntropyLoss supports a weight parameter. We replace FocalLoss with nn.CrossEntropyLoss(weight=w) to directly apply the inverse-frequency weighting, which will force the model to pay more attention to the underrepresented severe PD cases.
+
+This change leverages the already-computed weights and aligns with best practices for handling class imbalance in medical classification tasks where severe cases are clinically most important.
+</DESCRIPTION>
+
+<DIFF>
+<<<<<<< SEARCH
+    loss_fn = FocalLoss(alpha=0.25, gamma=2.0)
+    sch  = optim.lr_scheduler.CosineAnnealingLR(opt, T_max=epochs)
+=======
+    loss_fn = nn.CrossEntropyLoss(weight=w)
+    sch  = optim.lr_scheduler.CosineAnnealingLR(opt, T_max=epochs)
+>>>>>>> REPLACE
+</DIFF>
+
+<DIFF>
+<<<<<<< SEARCH
+from sklearn.metrics import f1_score
+
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+=======
+from sklearn.metrics import f1_score
+import torch.nn as nn
+
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+>>>>>>> REPLACE
+</DIFF>

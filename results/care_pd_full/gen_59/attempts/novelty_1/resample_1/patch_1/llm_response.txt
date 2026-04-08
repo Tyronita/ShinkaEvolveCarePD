@@ -1,0 +1,183 @@
+<NAME>
+add_jerk_trunk_arm_features
+</NAME>
+
+<DESCRIPTION>
+The current architecture relies on handcrafted gait features but misses key dynamics for classifying severe PD (class 2). The original recipe identified this bottleneck and recommended adding Category I (jerk), Category K (trunk stability), and Category L (arm swing) features — which are partially missing here. 
+
+Specifically:
+- Jerk (3rd derivative) captures bradykinesia and movement smoothness loss — absent in current feature set.
+- Trunk stability (spine joint variability) is a key compensatory control marker in severe PD.
+- Arm swing magnitude and asymmetry from shoulder/elbow are hallmarks of PD progression.
+
+These features directly address the 40+ severe→normal and 58+ severe→mild misclassifications by targeting within-walk deterioration and rigidity patterns. Adding them expands the feature vector by 144 (jerk) + 18 (spine velocity) + 36 (arm swing) = 198 dimensions, all derived from the robust 6D rotation representation.
+
+Furthermore, percentile features (10th, 25th, 75th, 90th) on joint velocities improve robustness to outliers and capture gait variability — another severe PD indicator. These were recommended in the original guidelines but missing.
+
+This edit implements all at once to maximize the jump in class 2 F1 — the current bottleneck at 0.47.
+</DESCRIPTION>
+
+<DIFF>
+<<<<<<< SEARCH
+    features.append(flat.mean(0))   # (144,)
+    features.append(flat.std(0))    # (144,)
+    features.append(flat.max(0) - flat.min(0))  # range (144,)
+
+    # 2. Velocity statistics (first derivative)
+    if T > 1:
+        vel = np.diff(flat, axis=0)  # (T-1, 144)
+        features.append(vel.mean(0))     # (144,)
+        features.append(vel.std(0))      # (144,)
+        features.append(np.abs(vel).mean(0))  # mean absolute velocity
+    else:
+        features.extend([np.zeros(144)] * 3)
+
+    # 3. Acceleration statistics (second derivative)
+    if T > 2:
+        acc = np.diff(vel, axis=0)  # (T-2, 144)
+        features.append(acc.mean(0))     # (144,)
+        features.append(acc.std(0))      # (144,)
+        features.append(np.abs(acc).mean(0))  # jerkiness
+    else:
+        features.extend([np.zeros(144)] * 3)
+=======
+    features.append(flat.mean(0))   # (144,)
+    features.append(flat.std(0))    # (144,)
+    features.append(flat.max(0) - flat.min(0))  # range (144,)
+
+    # 2. Velocity statistics (first derivative)
+    if T > 1:
+        vel = np.diff(flat, axis=0)  # (T-1, 144)
+        features.append(vel.mean(0))     # (144,)
+        features.append(vel.std(0))      # (144,)
+        features.append(np.abs(vel).mean(0))  # mean absolute velocity
+    else:
+        features.extend([np.zeros(144)] * 3)
+
+    # 3. Acceleration statistics (second derivative)
+    if T > 2:
+        acc = np.diff(vel, axis=0)  # (T-2, 144)
+        features.append(acc.mean(0))     # (144,)
+        features.append(acc.std(0))      # (144,)
+        features.append(np.abs(acc).mean(0))  # mean absolute acceleration
+    else:
+        features.extend([np.zeros(144)] * 3)
+
+    # 4. Jerk statistics (third derivative) - captures bradykinesia
+    if T > 3:
+        jerk = np.diff(acc, axis=0)  # (T-3, 144)
+        features.append(jerk.mean(0))   # (144,)
+        features.append(jerk.std(0))    # (144,)
+        features.append(np.abs(jerk).mean(0))  # (144,)
+    else:
+        features.extend([np.zeros(144)] * 3)
+>>>>>>> REPLACE
+</DIFF>
+
+<DIFF>
+<<<<<<< SEARCH
+    # 4. Left-right asymmetry
+    asym_pairs = [(1,2), (4,5), (7,8), (10,11)]  # hip, knee, ankle, foot
+    for l_idx, r_idx in asym_pairs:
+        diff = rot6d[:, l_idx, :] - rot6d[:, r_idx, :]  # (T, 6)
+        features.append(diff.mean(0))   # (6,)
+        features.append(diff.std(0))    # (6,)
+=======
+    # 4. Left-right asymmetry
+    asym_pairs = [(1,2), (4,5), (7,8), (10,11), (16,17)]  # hip, knee, ankle, foot, shoulders
+    for l_idx, r_idx in asym_pairs:
+        diff = rot6d[:, l_idx, :] - rot6d[:, r_idx, :]  # (T, 6)
+        features.append(diff.mean(0))   # (6,)
+        features.append(diff.std(0))    # (6,)
+>>>>>>> REPLACE
+</DIFF>
+
+<DIFF>
+<<<<<<< SEARCH
+    # 5. Velocity features for key gait joints
+    key_joints = [0, 1, 2, 4, 5, 7, 8, 10, 11]  # pelvis, hips, knees, ankles, feet
+    if T > 1:
+        joint_vel = np.diff(rot6d[:, :24, :], axis=0)  # (T-1, 24, 6)
+        for j in key_joints:
+            jv = joint_vel[:, j, :]  # (T-1, 6)
+            features.append(jv.mean(0))  # (6,)
+            features.append(jv.std(0))   # (6,)
+    else:
+        features.extend([np.zeros(6)] * 18)  # 9 joints × 2 stats
+=======
+    # 5. Velocity features for key gait joints
+    key_joints = [0, 1, 2, 4, 5, 7, 8, 10, 11]  # pelvis, hips, knees, ankles, feet
+    if T > 1:
+        joint_vel = np.diff(rot6d[:, :24, :], axis=0)  # (T-1, 24, 6)
+        for j in key_joints:
+            jv = joint_vel[:, j, :]  # (T-1, 6)
+            features.append(jv.mean(0))  # (6,)
+            features.append(jv.std(0))   # (6,)
+            # Percentile features for robustness to outliers
+            for q in [10, 25, 75, 90]:
+                features.append(np.percentile(jv, q, axis=0))  # (6,)
+    else:
+        features.extend([np.zeros(6)] * 9 * 6)  # 9 joints × 6 stats (2 base + 4 percentiles)
+
+    # 6. Trunk stability - spine joint variability
+    spine_joints = [3, 6, 9]  # spine1, spine2, spine3
+    if T > 1:
+        spine_rot = rot6d[:, spine_joints, :]  # (T, 3, 6)
+        spine_vel = np.diff(spine_rot, axis=0).reshape(-1, 18)  # (T-1, 18)
+        features.append(spine_vel.mean(0))  # (18,)
+        features.append(spine_vel.std(0))   # (18,)
+    else:
+        features.extend([np.zeros(18)] * 2)
+
+    # 7. Arm swing analysis - shoulder/elbow movement
+    if T > 1:
+        joint_vel = np.diff(rot6d[:, :24, :], axis=0)  # (T-1, 24, 6)
+        # Left and right arm (shoulder and elbow)
+        l_swings = joint_vel[:, [16, 18], :3]  # (T-1, 2, 3)
+        r_swings = joint_vel[:, [17, 19], :3]
+        # Magnitude and asymmetry
+        l_mag = np.linalg.norm(l_swings, axis=-1).mean(axis=-1)  # (T-1,)
+        r_mag = np.linalg.norm(r_swings, axis=-1).mean(axis=-1)
+        features.append(np.array([l_mag.mean(), l_mag.std(),
+                                 r_mag.mean(), r_mag.std()]))  # (4,)
+        # Asymmetry
+        asym = l_mag - r_mag
+        features.append(np.array([asym.mean(), asym.std()]))  # (2,)
+    else:
+        features.extend([np.zeros(4), np.zeros(2)])
+>>>>>>> REPLACE
+</DIFF>
+
+<DIFF>
+<<<<<<< SEARCH
+    # 6. Frequency domain features from pelvis and ankle
+    freqs = np.fft.rfftfreq(T, d=1.0/30) if T > 1 else [0]
+=======
+    # 8. Frequency domain features from pelvis and ankle
+    freqs = np.fft.rfftfreq(T, d=1.0/30) if T > 1 else [0]
+>>>>>>> REPLACE
+</DIFF>
+
+<DIFF>
+<<<<<<< SEARCH
+    # 7. Gait regularity from pelvis autocorrelation
+    if T > 1:
+=======
+    # 9. Gait regularity from pelvis autocorrelation
+    if T > 1:
+>>>>>>> REPLACE
+</DIFF>
+
+<DIFF>
+<<<<<<< SEARCH
+    # 8. Sequence-level features
+    duration = T / 30.0
+    step_features = np.array([duration, np.log1p(T)])
+    features.append(step_features)
+=======
+    # 10. Sequence-level features
+    duration = T / 30.0
+    step_features = np.array([duration, np.log1p(T)])
+    features.append(step_features)
+>>>>>>> REPLACE
+</DIFF>

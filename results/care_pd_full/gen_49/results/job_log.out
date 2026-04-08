@@ -1,0 +1,109 @@
+========================================================================
+[evaluate] genome:      gen_49
+[evaluate] program:     /workspace/ShinkaEvolveCarePD/results/care_pd_full/gen_49/main.py
+[evaluate] results_dir: /workspace/ShinkaEvolveCarePD/results/care_pd_full/gen_49/results
+[evaluate] care_pd_dir: /workspace/CARE-PD
+[evaluate] gpu:         CUDA  device=NVIDIA RTX A5000  vram=25.3GB  gpus=1
+========================================================================
+[evaluate] Loading dataset from /workspace/CARE-PD/assets/datasets/BMCLab.pkl ...
+[evaluate] Dataset loaded in 0.36s
+[evaluate] subjects=23  walks=781  label_dist={0:341, 1:276, 2:164}  folds=6
+[evaluate] Pretrained checkpoints available:
+  mixste: best_epoch_cpn_81f.bin (404.7MB)
+  momask: opt.txt (0.0MB), .DS_Store (0.0MB), net_best_fid.tar (84.1MB)
+  motionagformer: motionagformer-s-h36m.pth.tr (59.8MB)
+  motionbert: motionbert.bin (170.0MB)
+  motionbertlite: latest_epoch.bin (64.1MB)
+  motionclip: motionclip_encoder_checkpoint_0100.pth.tar (77.9MB), .DS_Store (0.0MB)
+  poseformerv2: 27_243_45.2.bin (172.8MB), 9_81_46.0.bin (172.5MB), .DS_Store (0.0MB)
+  potr: pre-trained_NTU_ckpt_epoch_199_enc_80_dec_20.pt (26.5MB)
+========================================================================
+[evaluate] Importing genome ...
+[evaluate] Import OK (10.48s)
+[evaluate] Running run_evaluation() ...
+[genome] Class weights: {0: 0.6458982346832814, 1: 1.4200913242009132, 2: 7.585365853658536}
+[genome] Train class dist: [321 219  82]
+[genome] Extracting comprehensive gait features...
+[genome] Gait feature dim: 2677
+[genome] checkpoint: 2/101 layers loaded from motionclip_encoder_checkpoint_0100.pth.tar
+[genome] Augmenting with MotionCLIP embeddings (device=cuda)
+[genome] Combined feature dim: 3189
+[genome] Fitting ensemble classifiers...
+[genome] Running calibrated soft voting ensemble...
+  fold 1: macro_f1=0.4558  f1=[normal:0.352, mild:0.679, severe:0.337]
+[genome] Class weights: {0: 0.8893387314439946, 1: 1.287109375, 2: 4.2243589743589745}
+[genome] Train class dist: [247 256 156]
+[genome] Extracting comprehensive gait features...
+[genome] Gait feature dim: 2677
+[genome] checkpoint: 2/101 layers loaded from motionclip_encoder_checkpoint_0100.pth.tar
+[genome] Augmenting with MotionCLIP embeddings (device=cuda)
+[genome] Combined feature dim: 3189
+[genome] Fitting ensemble classifiers...
+[genome] Running calibrated soft voting ensemble...
+  fold 2: macro_f1=0.3774  f1=[normal:0.950, mild:0.000, severe:0.182]
+[genome] Class weights: {0: 0.8179487179487179, 1: 1.4906542056074765, 2: 3.890243902439024}
+[genome] Train class dist: [260 214 164]
+[genome] Extracting comprehensive gait features...
+[genome] Gait feature dim: 2677
+[genome] checkpoint: 2/101 layers loaded from motionclip_encoder_checkpoint_0100.pth.tar
+[genome] Augmenting with MotionCLIP embeddings (device=cuda)
+[genome] Combined feature dim: 3189
+[genome] Fitting ensemble classifiers...
+[genome] Running calibrated soft voting ensemble...
+  fold 3: macro_f1=0.5237  f1=[normal:0.865, mild:0.706, severe:0.000]
+[genome] Class weights: {0: 0.7161290322580646, 1: 1.5275229357798163, 2: 4.826086956521739}
+[genome] Train class dist: [310 218 138]
+[genome] Extracting comprehensive gait features...
+[genome] Gait feature dim: 2677
+[genome] checkpoint: 2/101 layers loaded from motionclip_encoder_checkpoint_0100.pth.tar
+[genome] Augmenting with MotionCLIP embeddings (device=cuda)
+[genome] Combined feature dim: 3189
+[genome] Fitting ensemble classifiers...
+[genome] Running calibrated soft voting ensemble...
+  fold 4: macro_f1=0.6496  f1=[normal:0.871, mild:0.678, severe:0.400]
+[genome] Class weights: {0: 0.8156565656565656, 1: 1.3862660944206007, 2: 4.3355704697986575}
+[genome] Train class dist: [264 233 149]
+[genome] Extracting comprehensive gait features...
+[genome] Gait feature dim: 2677
+[genome] checkpoint: 2/101 layers loaded from motionclip_encoder_checkpoint_0100.pth.tar
+[genome] Augmenting with MotionCLIP embeddings (device=cuda)
+[genome] Combined feature dim: 3189
+[genome] Fitting ensemble classifiers...
+[genome] Running calibrated soft voting ensemble...
+  fold 5: macro_f1=0.3776  f1=[normal:0.607, mild:0.526, severe:0.000]
+[genome] Class weights: {0: 0.7414741474147415, 1: 1.4041666666666668, 2: 5.145038167938931}
+[genome] Train class dist: [303 240 131]
+[genome] Extracting comprehensive gait features...
+[genome] Gait feature dim: 2677
+[genome] checkpoint: 2/101 layers loaded from motionclip_encoder_checkpoint_0100.pth.tar
+[genome] Augmenting with MotionCLIP embeddings (device=cuda)
+[genome] Combined feature dim: 3189
+[genome] Fitting ensemble classifiers...
+[genome] Running calibrated soft voting ensemble...
+  fold 6: macro_f1=0.4326  f1=[normal:0.617, mild:0.000, severe:0.680]
+
+[result] macro_f1=0.5728  f1_class=[normal:0.7404, mild:0.5606, severe:0.4172]  device=cuda
+========================================================================
+[evaluate] RESULTS — gen_49
+  macro_f1        : 0.5728   (baseline 0.5650, LOSO SOTA 0.68)
+  f1_class0_normal: 0.7404   (n=341 walks)
+  f1_class1_mild  : 0.5606   (n=276 walks)
+  f1_class2_severe: 0.4172   (n=164 walks)  ← clinically most important
+  n_walks_total   : 781
+  eval_time       : 2393.2s
+  confusion_matrix:
+    pred→  [0]   [1]   [2]
+    true[0] normal: [271, 54, 16]
+    true[1] mild  : [69, 148, 59]
+    true[2] severe: [51, 50, 63]
+  per_fold_f1:
+    fold 1: 0.4558  (test=159, train=622)
+    fold 2: 0.3774  (test=122, train=659)
+    fold 3: 0.5237  (test=143, train=638)
+    fold 4: 0.6496  (test=115, train=666)
+    fold 5: 0.3776  (test=135, train=646)
+    fold 6: 0.4326  (test=107, train=674)
+  pred_dist  : {0: 391, 1: 252, 2: 138}
+  label_dist : {0: 341, 1: 276, 2: 164}
+========================================================================
+[evaluate] Leaderboard updated: /workspace/ShinkaEvolveCarePD/care_pd_task/leaderboard.csv

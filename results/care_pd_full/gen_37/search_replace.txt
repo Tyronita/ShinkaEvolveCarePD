@@ -1,0 +1,45 @@
+<NAME>
+stacking_meta_learner_rf_gb
+</NAME>
+
+<DESCRIPTION>
+The current program uses a soft voting ensemble of GradientBoosting and SVC, which treats both classifiers equally. However, analysis of the confusion matrix shows that class 2 (severe PD) is still under-predicted (68 correct vs 50/46 false negatives), and class 0 is over-predicted. A stacking meta-learner can learn to optimally combine the strengths of each base classifier.
+
+GradientBoosting is typically better at handling imbalanced data and capturing complex interactions in tabular features, while SVC with RBF kernel excels at finding non-linear decision boundaries. By training a meta-learner on out-of-fold predictions from both classifiers, we can achieve better calibration and improved macro-F1.
+
+The key insight is to replace the fixed-weight soft voting with a learned combination via LogisticRegression meta-learner, which can assign different weights to RF and GB predictions based on their performance per class. This approach typically gains 2-5% macro-F1 on imbalanced problems compared to simple voting.
+</DESCRIPTION>
+
+<DIFF>
+<<<<<<< SEARCH
+    # Create ensemble with class_weight='balanced'
+    clf = Pipeline([
+        ('scaler', StandardScaler()),
+        ('ensemble', VotingClassifier([
+            ('gbc', GradientBoostingClassifier(n_estimators=100, random_state=42)),
+            ('svc', SVC(kernel='rbf', C=10, gamma='scale', class_weight='balanced', probability=True))
+        ], voting='soft'))
+    ])
+=======
+    # Create stacking ensemble with meta-learner
+    from sklearn.ensemble import StackingClassifier
+    from sklearn.linear_model import LogisticRegression
+
+    # Base estimators
+    gbc = GradientBoostingClassifier(n_estimators=100, random_state=42)
+    svc = SVC(kernel='rbf', C=10, gamma='scale', class_weight='balanced', probability=True)
+
+    # Stacking classifier with meta-learner
+    clf = Pipeline([
+        ('scaler', StandardScaler()),
+        ('stacking', StackingClassifier(
+            estimators=[('gbc', gbc), ('svc', svc)],
+            final_estimator=LogisticRegression(
+                C=1.0, class_weight='balanced', max_iter=1000, random_state=42
+            ),
+            cv=5,  # 5-fold internal CV for out-of-fold predictions
+            stack_method='predict_proba'  # Use probability outputs
+        ))
+    ])
+>>>>>>> REPLACE
+</DIFF>

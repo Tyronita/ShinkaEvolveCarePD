@@ -1,0 +1,14 @@
+{
+  "generation": 44,
+  "novelty_attempt": 1,
+  "resample_attempt": 1,
+  "patch_attempt": 1,
+  "success": true,
+  "num_applied": 1,
+  "patch_name": "class2_recovery_weighted_loss",
+  "patch_description": "The current program achieves 0.61 macro-F1 but critically underperforms on class 2 (severe PD) with only 0.41 F1. Key issues identified:\n\n1. **Class 2 is undersampled**: Only 164/781 samples (21%) are severe, and the current feature extractor doesn't emphasize class-discriminative features.\n\n2. **Feature redundancy**: The 1389-dim handcrafted features contain redundant information that dilutes discriminative power.\n\n3. **MotionCLIP integration is unstable**: The current code fails gracefully when MotionCLIP fails, but doesn't ensure class balance in the combined feature space.\n\nThe new program addresses these by:\n- Implementing mandatory class-weighted loss via sklearn's `class_weight='balanced'`\n- Adding explicit class 2 oversampling in the ensemble training\n- Simplifying features to focus on PD-relevant biomarkers (asymmetry, stride, velocity)\n- Using XGBoost as a third estimator with built-in `scale_pos_weight` for severe class boosting\n- Adding decision threshold adjustment to favor class 2 predictions\n\nThese changes directly target the severe PD classification bottleneck while maintaining the proven handcrafted feature approach.",
+  "error_msg": null,
+  "timestamp": "2026-04-06T17:37:57.595353",
+  "llm_cost": 0.0060856999999999994,
+  "llm_model": null
+}

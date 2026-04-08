@@ -1,0 +1,14 @@
+{
+  "generation": 6,
+  "novelty_attempt": 1,
+  "resample_attempt": 1,
+  "patch_attempt": 1,
+  "success": true,
+  "num_applied": 2,
+  "patch_name": "multiwindow_weighted_loss_improved_classifier",
+  "patch_description": "Three key improvements:\n1. Replace FocalLoss (which wasn't doing per-class weighting) with weighted CrossEntropyLoss using strong inverse-frequency weights (class 2 gets ~2x weight vs class 0). This directly addresses the F1=0.00 for severe PD.\n2. Multi-window feature extraction: slide multiple 60-frame windows over the full walk and average the embeddings. This captures more temporal information from longer walks (up to 3015 frames).\n3. Improved MLP classifier with BatchNorm, deeper architecture, and more epochs to better separate the 3 classes.",
+  "error_msg": null,
+  "timestamp": "2026-04-06T12:45:18.297566",
+  "llm_cost": 0.074811,
+  "llm_model": null
+}

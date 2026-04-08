@@ -1,0 +1,55 @@
+<NAME>
+calibrate_gradient_boosting
+</NAME>
+
+<DESCRIPTION>
+The current program uses a soft-voting ensemble of Random Forest and Gradient Boosting, but only the Random Forest component is probability-calibrated using `CalibratedClassifierCV` in the previous high-performing version (0.66 macro-F1). The Gradient Boosting classifier produces miscalibrated probabilities, often underestimating the severe class (UPDRS=2), which biases the soft-voting ensemble.
+
+The top-performing prior program (macro-F1=0.66) applied isotonic calibration to the Random Forest, but did not calibrate Gradient Boosting. By applying the same calibration strategy to Gradient Boosting, we ensure both ensemble members contribute well-calibrated probabilities, especially for the underrepresented severe class. This directly addresses the persistent under-prediction of class 2 (severe PD) seen in confusion matrices.
+
+We wrap the Gradient Boosting pipeline with `CalibratedClassifierCV(method='isotonic', cv=3)` to match the calibration of the Random Forest, ensuring both models are treated equally in soft voting. This change requires no new features or architecture changes and leverages the existing class-weighted setup.
+</DESCRIPTION>
+
+<DIFF>
+<<<<<<< SEARCH
+    # Gradient Boosting pipeline
+    gb = Pipeline([
+        ('scaler', StandardScaler()),
+        ('clf', GradientBoostingClassifier(
+            n_estimators=200,
+            max_depth=4,
+            learning_rate=0.05,
+            subsample=0.8,
+            random_state=42
+        ))
+    ])
+=======
+    # Gradient Boosting pipeline with isotonic calibration
+    gb_base = Pipeline([
+        ('scaler', StandardScaler()),
+        ('clf', GradientBoostingClassifier(
+            n_estimators=200,
+            max_depth=4,
+            learning_rate=0.05,
+            subsample=0.8,
+            random_state=42
+        ))
+    ])
+    gb = CalibratedClassifierCV(gb_base, method='isotonic', cv=3)
+>>>>>>> REPLACE
+</DIFF>
+
+<DIFF>
+<<<<<<< SEARCH
+    from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
+    from sklearn.ensemble import VotingClassifier
+    from sklearn.preprocessing import StandardScaler
+    from sklearn.pipeline import Pipeline
+=======
+    from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
+    from sklearn.ensemble import VotingClassifier
+    from sklearn.preprocessing import StandardScaler
+    from sklearn.pipeline import Pipeline
+    from sklearn.calibration import CalibratedClassifierCV
+>>>>>>> REPLACE
+</DIFF>

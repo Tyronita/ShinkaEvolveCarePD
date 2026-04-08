@@ -1,0 +1,14 @@
+{
+  "generation": 66,
+  "novelty_attempt": 1,
+  "resample_attempt": 1,
+  "patch_attempt": 1,
+  "success": true,
+  "num_applied": 1,
+  "patch_name": "add_temporal_segmentation_features",
+  "patch_description": "The current handcrafted features compute statistics over the entire gait sequence, which may miss dynamic changes such as freezing-of-gait episodes or fatigue-induced deterioration in severe PD patients. To capture within-walk temporal patterns, we add a new feature block that splits the sequence into 4 non-overlapping quarters and computes per-segment mean and std for both pose and velocity. Then, we compute the standard deviation across segment means and segment stds, resulting in 288 dimensions per signal type.\n\nThis change specifically targets class 2 (severe PD) by modeling fluctuations in gait dynamics over time\u2014key indicators of advanced disease like inconsistent stride patterns and intermittent freezing. These features are concatenated at the end of `extract_gait_features` and will improve discrimination between mild and severe cases, especially in folds where current F1 for class 2 is low (e.g., fold 1: 0.35, fold 5: 0.31). The feature vector remains fully compatible with the sklearn pipeline and benefits from class weighting.",
+  "error_msg": null,
+  "timestamp": "2026-04-06T20:36:24.979088",
+  "llm_cost": 0.00200841,
+  "llm_model": null
+}

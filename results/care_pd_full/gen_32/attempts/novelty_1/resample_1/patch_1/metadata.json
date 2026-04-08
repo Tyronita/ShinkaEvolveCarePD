@@ -1,0 +1,14 @@
+{
+  "generation": 32,
+  "novelty_attempt": 1,
+  "resample_attempt": 1,
+  "patch_attempt": 1,
+  "success": true,
+  "num_applied": 8,
+  "patch_name": "hybrid_features_sklearn_ensemble",
+  "patch_description": "Key improvements:\n1. Add SMOTE-like oversampling for GradientBoosting which doesn't support class_weight\n2. Expand the ensemble to include SVM (rbf) and ExtraTrees, both with class_weight='balanced'\n3. Add more discriminative handcrafted features: coefficient of variation, cross-joint coordination, energy-based features, percentile features\n4. Extract both mean AND std of MotionCLIP window embeddings to capture gait variability\n5. Use HistGradientBoosting which supports sample_weight for better class 2 handling\n6. Add feature selection via variance threshold to remove noisy features",
+  "error_msg": null,
+  "timestamp": "2026-04-06T15:39:30.178949",
+  "llm_cost": 0.3411,
+  "llm_model": null
+}

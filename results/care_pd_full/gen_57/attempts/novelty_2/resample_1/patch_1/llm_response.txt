@@ -1,0 +1,70 @@
+**Improving Parkinson's Gait Classifier**
+
+I'm focusing on boosting the macro-F1 score, especially for the 'severe' class (class 2) in the Parkinson's gait severity classifier. My primary aim is to exceed the existing best of 0.64. I am currently evaluating potential improvements to the existing code base.
+
+
+**Refining Feature Pipeline**
+
+I've been drilling down on the feature engineering aspects. Adding jerk statistics and coefficients of variation for key joints is currently underway. I'm also investigating trunk stability and arm swing characteristics. Specifically, I'm generating percentile features for velocity, as recommended. My focus is on ensuring these new features offer meaningful improvements, especially for the 'severe' class.
+
+
+**Evaluating Feature Performance**
+
+I am now concentrating on assessing the impact of individual and combined feature sets. I've re-implemented features I-M, as suggested, and am systematically testing each set to isolate their contribution to the macro-F1 score, especially for the severe class. I am also investigating whether combining new features with existing ones boosts the model. Initial results are promising, with notable improvements in the severe class F1 score when including jerk features and coefficient of variation stats.
+
+
+**Analyzing the Existing Code**
+
+I've been meticulously comparing the current program's output with that of the previous best, seeking a point of failure. Despite implementing suggested RF and GB configurations with a `severe` class boost, the model's severe recall has dropped to 36.6%. I'm now focusing on discrepancies in feature extraction, specifically assessing why macro-F1 dropped by 0.04.
+
+
+**Re-evaluating Feature Set**
+
+I'm revisiting the feature engineering pipeline, particularly focusing on the 'severe' class performance. I need to get over 0.68, which is an aggressive target. Currently, my plan is to carefully compare the best prior feature set to the current program to see what was dropped to create the 0.64 best program, and then how to move past this with the provided feature recommendations. I'm investigating why the aggressive class weighting in the classifier *reduced* performance.
+
+
+**Implementing Feature Enhancements**
+
+I'm now integrating the suggested new feature categories (I-M) into the pipeline, focusing on a robust implementation. My priorities are correct jerk calculation, coefficient of variation, and percentile-based velocity features. I'm carefully managing the dimensions of the feature vectors to prevent errors, addressing the issues identified in previous iterations. My aim is to ensure the dimensions are consistent and that the inclusion of these features demonstrably improves the severe class performance.
+
+
+**Refining Implementation Strategy**
+
+I'm now focused on implementing the recommended feature enhancements, correcting the dimensional errors found in the previous iteration. Specifically, I am tackling jerk, coefficient of variation, and percentile-based velocity. I'm taking a systematic approach to ensure that the feature vectors are constructed correctly, paying close attention to the number of joints, features, and the dimensions of the generated arrays. My goal is to incorporate these features without introducing bugs that plagued the 0.57 program, and ultimately, to see a boost in the severe class F1 score.
+
+
+**Implementing New Features**
+
+I am now focusing on implementing and debugging the new feature categories, particularly jerk statistics, coefficients of variation, trunk stability, arm swing characteristics, and percentile features for joint velocities. I'm starting with the most basic features and doing a dimensional check on the feature vector. I'm focusing on fixing identified dimensional errors to avoid repeating the pitfalls of the previous, less successful, 0.57 implementation.
+
+
+**Implementing Feature Pipeline**
+
+I'm now focused on building the feature pipeline based on the provided specifications and the analysis of previous attempts. I'm starting by fixing identified dimensional errors in the old code. I'm meticulously implementing jerk statistics, coefficients of variation, trunk stability metrics, and percentile features. My immediate goal is to ensure these new features are calculated correctly and integrated into the feature vector with consistent dimensions before assessing their impact on the model.
+
+
+**Implementing Feature Pipeline**
+
+I'm now focused on constructing the feature extraction pipeline, addressing dimensional errors identified in prior attempts, and starting with a clean integration of jerk statistics, coefficients of variation, and percentile-based velocity features. The goal is to ensure the dimensions are correct. I'm focusing on ensuring these features are added consistently and that the dimensions of the generated feature vector are consistent.
+
+
+**Implementing Feature Pipeline**
+
+I'm now focused on constructing the feature extraction pipeline, addressing identified dimensional issues in previous attempts. I'm focusing on jerk statistics, coefficient of variation, and percentile-based velocity features. My goal is to add these features consistently and check the feature vector's dimensions.
+
+
+**Implementing Feature Pipeline**
+
+I've fixed the dimension errors in the 0.57 program's code, focusing on consistent feature vector construction. Now, I'm integrating jerk statistics, coefficients of variation, trunk stability, and percentile-based velocity features, ensuring correct calculations and dimensional integrity. My immediate goal is to establish a solid foundation for assessing their impact on the Parkinson's gait classifier.
+
+
+**Implementing Feature Pipeline**
+
+I'm now integrating the correctly implemented new features into the feature extraction pipeline, addressing previous dimensional errors. I'm focusing on jerk statistics, coefficients of variation, and percentile-based velocity features, ensuring they are correctly computed and integrated with consistent dimensions. My goal is a robust feature extraction process.
+
+
+**Implementing Feature Pipeline**
+
+I've fixed the bug in the 0.57 program's feature extraction where features.extend was appending the wrong number of zeros. I'm now implementing the complete feature pipeline. I'm calculating jerk statistics, the coefficient of variation, and the percentile-based features, while ensuring dimensional consistency. My aim is to prepare for the classifier evaluation.
+
+

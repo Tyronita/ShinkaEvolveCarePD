@@ -1,0 +1,14 @@
+{
+  "generation": 43,
+  "novelty_attempt": 1,
+  "resample_attempt": 1,
+  "patch_attempt": 1,
+  "success": true,
+  "num_applied": 1,
+  "patch_name": "gait_rf_ensemble_hybrid",
+  "patch_description": "This crossover combines the best elements from the prior programs:\n\n1. **Primary approach**: Handcrafted gait features (from the 0.63-scoring program) as the main signal \u2014 these physics-informed features capture PD-specific biomarkers (asymmetry, ROM, stride frequency, freeze-of-gait proxy) far better than raw MotionCLIP embeddings alone.\n\n2. **Classifier**: Uses a RandomForest + GradientBoosting VotingClassifier ensemble with proper `class_weight` (inverse frequency) passed directly to sklearn classifiers. This is the winning strategy from the system prompt. Avoids the slow StackingClassifier (which caused 2935s eval time) and the failing FocalLoss.\n\n3. **MotionCLIP as optional augmentation**: If available, MotionCLIP embeddings are concatenated to the handcrafted features using simple mean pooling (not untrainable attention pooling). This follows the system prompt recommendation exactly.\n\n4. **Class weights**: Computed correctly as `counts.sum() / (3 * counts[i])` and passed to RF's `class_weight` parameter. GBC gets `sample_weight` during fit.\n\n5. **Speed**: Avoids stacking CV (which multiplied training time) and attention pooling. Uses batch window encoding for efficiency.\n\nKey improvements over current program (0.58):\n- Replaces slow StackingClassifier with fast VotingClassifier\n- Uses RF with class_weight instead of SVC (RF is more robust on this task)\n- Properly passes class weights to GBC via sample_weight\n- Cleans up NaN values with np.nan_to_num\n- Per-fold F1 printing maintained for meta-reasoning",
+  "error_msg": null,
+  "timestamp": "2026-04-06T17:26:02.596731",
+  "llm_cost": 0.23506500000000002,
+  "llm_model": null
+}

@@ -1,0 +1,14 @@
+{
+  "generation": 78,
+  "novelty_attempt": 1,
+  "resample_attempt": 1,
+  "patch_attempt": 1,
+  "success": true,
+  "num_applied": 1,
+  "patch_name": "calibrated_rf_gb_ensemble_v3",
+  "patch_description": "Based on the analysis of top-performing programs and the current best score of 0.64, I've created a new version that combines the most effective components:\n\nThe key improvements from the proven best-performing program (0.6551) are:\n1. Added CalibratedClassifierCV with isotonic regression to the Random Forest pipeline - this is the single most impactful change, increasing severe class F1 from ~0.47 to 0.52 by correcting RF's systematic underestimation of minority class probabilities.\n2. Updated RF parameters to n_estimators=500 and min_samples_leaf=1 as used in the top-performing program for better probability estimates.\n3. Maintained the exact proven feature extraction code that yields 1389-dim features.\n4. Kept the successful MotionCLIP integration with graceful fallback.\n\nThe calibrated ensemble directly addresses the primary bottleneck (severe class under-prediction) and represents the current state-of-the-art for this task. I've preserved all other successful components including the handcrafted gait features, MotionCLIP integration, and the overall pipeline structure.",
+  "error_msg": null,
+  "timestamp": "2026-04-06T23:01:50.287269",
+  "llm_cost": 0.0076759,
+  "llm_model": null
+}

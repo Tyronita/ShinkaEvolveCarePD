@@ -1,0 +1,486 @@
+
+
+Looking at the current program's performance (0.62 macro-F1), I can see several opportunities for improvement:
+
+1. **GradientBoosting doesn't use class_weight** - The GB classifier in the ensemble doesn't handle class imbalance, hurting class 2 recall
+2. **The ensemble could be stronger** - Adding SVM and ExtraTrees with proper class weighting
+3. **Feature engineering gaps** - Missing some important PD-specific features like coefficient of variation, energy ratios, and cross-joint coordination
+4. **Oversampling for GB** - Need to oversample minority class for classifiers that don't support class_weight
+5. **MotionCLIP window statistics** - Instead of just mean pooling, also capture std across windows (variability of gait across the walk)
+
+<NAME>
+hybrid_features_sklearn_ensemble
+</NAME>
+
+<DESCRIPTION>
+Key improvements:
+1. Add SMOTE-like oversampling for GradientBoosting which doesn't support class_weight
+2. Expand the ensemble to include SVM (rbf) and ExtraTrees, both with class_weight='balanced'
+3. Add more discriminative handcrafted features: coefficient of variation, cross-joint coordination, energy-based features, percentile features
+4. Extract both mean AND std of MotionCLIP window embeddings to capture gait variability
+5. Use HistGradientBoosting which supports sample_weight for better class 2 handling
+6. Add feature selection via variance threshold to remove noisy features
+</DESCRIPTION>
+
+<DIFF>
+<<<<<<< SEARCH
+    # ── 1. Global statistics ──────────────────────────────────────────────
+    mean_feat = flat.mean(0)          # (144,)
+    std_feat = flat.std(0)            # (144,)
+    range_feat = flat.max(0) - flat.min(0)  # (144,)
+
+    # ── 2. Velocity and acceleration ──────────────────────────────────────
+    vel = np.diff(flat, axis=0)       # (T-1, 144)
+    acc = np.diff(vel, axis=0)        # (T-2, 144)
+    vel_mean = vel.mean(0)            # (144,)
+    vel_std = vel.std(0)              # (144,) - important: PD has reduced velocity variance
+    vel_max = np.abs(vel).max(0)      # (144,)
+    acc_std = acc.std(0)              # (144,)
+
+    # ── 3. Key joint velocity statistics ─────────────────────────────────
+    # SMPL joints: pelvis=0, L_hip=1, R_hip=2, spine1=3, L_knee=4, R_knee=5
+    #              L_ankle=7, R_ankle=8, L_foot=10, R_foot=11
+    key_joints = [0, 1, 2, 4, 5, 7, 8, 10, 11]  # gait-relevant joints
+    joint_vel = np.diff(rot6d[:, :24, :], axis=0)  # (T-1, 24, 6)
+    kj_vel_mean = np.abs(joint_vel[:, key_joints, :]).mean(axis=0).flatten()  # (54,)
+    kj_vel_std = joint_vel[:, key_joints, :].std(axis=0).flatten()  # (54,)
+=======
+    # ── 1. Global statistics ──────────────────────────────────────────────
+    mean_feat = flat.mean(0)          # (144,)
+    std_feat = flat.std(0)            # (144,)
+    range_feat = flat.max(0) - flat.min(0)  # (144,)
+    q25_feat = np.percentile(flat, 25, axis=0)  # (144,)
+    q75_feat = np.percentile(flat, 75, axis=0)  # (144,)
+    iqr_feat = q75_feat - q25_feat    # (144,) interquartile range
+    # Coefficient of variation (PD patients have higher CV)
+    cv_feat = std_feat / (np.abs(mean_feat) + 1e-8)  # (144,)
+
+    # ── 2. Velocity and acceleration ──────────────────────────────────────
+    vel = np.diff(flat, axis=0)       # (T-1, 144)
+    acc = np.diff(vel, axis=0)        # (T-2, 144)
+    vel_mean = vel.mean(0)            # (144,)
+    vel_std = vel.std(0)              # (144,) - important: PD has reduced velocity variance
+    vel_max = np.abs(vel).max(0)      # (144,)
+    acc_std = acc.std(0)              # (144,)
+    acc_mean = np.abs(acc).mean(0)    # (144,) mean absolute acceleration (jerkiness)
+    # Jerk (3rd derivative) - smoothness of movement
+    if T > 3:
+        jerk = np.diff(acc, axis=0)
+        jerk_rms = np.sqrt((jerk**2).mean(0))  # (144,) RMS jerk
+    else:
+        jerk_rms = np.zeros(144, dtype=np.float32)
+
+    # ── 3. Key joint velocity statistics ─────────────────────────────────
+    # SMPL joints: pelvis=0, L_hip=1, R_hip=2, spine1=3, L_knee=4, R_knee=5
+    #              L_ankle=7, R_ankle=8, L_foot=10, R_foot=11
+    key_joints = [0, 1, 2, 4, 5, 7, 8, 10, 11]  # gait-relevant joints
+    joint_vel = np.diff(rot6d[:, :24, :], axis=0)  # (T-1, 24, 6)
+    kj_vel_mean = np.abs(joint_vel[:, key_joints, :]).mean(axis=0).flatten()  # (54,)
+    kj_vel_std = joint_vel[:, key_joints, :].std(axis=0).flatten()  # (54,)
+    # Per-joint energy (sum of squared velocities)
+    kj_energy = (joint_vel[:, key_joints, :]**2).sum(axis=0).flatten()  # (54,)
+>>>>>>> REPLACE
+</DIFF>
+
+<DIFF>
+<<<<<<< SEARCH
+    # ── 4. Left-right asymmetry ───────────────────────────────────────────
+    # Larger asymmetry → more severe PD
+    asym_hip = rot6d[:, 1, :] - rot6d[:, 2, :]       # (T, 6)
+    asym_knee = rot6d[:, 4, :] - rot6d[:, 5, :]      # (T, 6)
+    asym_ankle = rot6d[:, 7, :] - rot6d[:, 8, :]     # (T, 6)
+    asym_foot = rot6d[:, 10, :] - rot6d[:, 11, :]    # (T, 6)
+
+    asym_features = np.concatenate([
+        asym_hip.mean(0), asym_hip.std(0),
+        asym_knee.mean(0), asym_knee.std(0),
+        asym_ankle.mean(0), asym_ankle.std(0),
+        asym_foot.mean(0), asym_foot.std(0),
+    ])  # (48,)
+=======
+    # ── 4. Left-right asymmetry ───────────────────────────────────────────
+    # Larger asymmetry → more severe PD
+    lr_pairs = [(1, 2), (4, 5), (7, 8), (10, 11), (16, 17), (18, 19), (20, 21)]
+    asym_features_list = []
+    for l_idx, r_idx in lr_pairs:
+        diff = rot6d[:, l_idx, :] - rot6d[:, r_idx, :]  # (T, 6)
+        asym_features_list.extend([
+            diff.mean(0),           # mean asymmetry
+            diff.std(0),            # variability of asymmetry
+            np.abs(diff).mean(0),   # magnitude of asymmetry
+        ])
+        # Velocity asymmetry
+        vel_l = np.diff(rot6d[:, l_idx, :], axis=0)
+        vel_r = np.diff(rot6d[:, r_idx, :], axis=0)
+        vel_diff = np.abs(vel_l).mean(0) - np.abs(vel_r).mean(0)
+        asym_features_list.append(vel_diff)  # (6,)
+
+    asym_features = np.concatenate(asym_features_list)  # (7*4*6 = 168,)
+
+    # ── 4b. Cross-joint coordination ──────────────────────────────────────
+    # Correlation between hip and knee on same side (reduced in PD)
+    coord_features = []
+    for hip_idx, knee_idx in [(1, 4), (2, 5)]:
+        for ch in range(3):  # first 3 rotation components
+            hip_sig = rot6d[:, hip_idx, ch]
+            knee_sig = rot6d[:, knee_idx, ch]
+            if hip_sig.std() > 1e-8 and knee_sig.std() > 1e-8:
+                corr = np.corrcoef(hip_sig, knee_sig)[0, 1]
+            else:
+                corr = 0.0
+            coord_features.append(corr)
+    # Hip-ankle coordination
+    for hip_idx, ankle_idx in [(1, 7), (2, 8)]:
+        for ch in range(3):
+            hip_sig = rot6d[:, hip_idx, ch]
+            ankle_sig = rot6d[:, ankle_idx, ch]
+            if hip_sig.std() > 1e-8 and ankle_sig.std() > 1e-8:
+                corr = np.corrcoef(hip_sig, ankle_sig)[0, 1]
+            else:
+                corr = 0.0
+            coord_features.append(corr)
+    coord_features = np.array(coord_features, dtype=np.float32)  # (12,)
+>>>>>>> REPLACE
+</DIFF>
+
+<DIFF>
+<<<<<<< SEARCH
+    # ── 7. Gait regularity: autocorrelation of pelvis rotation ───────────
+    pelvis_ac = rot6d[:, 0, 0] - rot6d[:, 0, 0].mean()
+    ac = np.correlate(pelvis_ac, pelvis_ac, mode='full')
+    ac = ac[T-1:] / (ac[T-1] + 1e-8)
+    max_lag = min(60, len(ac))
+    ac_trunc = ac[1:max_lag]
+    # Find first local maximum (stride period)
+    regularity_features = np.array([
+        ac_trunc.max(),                    # peak autocorrelation (regularity)
+        ac_trunc.mean(),                   # mean autocorrelation
+        np.argmax(ac_trunc) / 30.0,       # stride period estimate (seconds)
+    ])  # (3,)
+=======
+    # ── 7. Gait regularity: autocorrelation of pelvis rotation ───────────
+    regularity_list = []
+    for j_idx in [0, 1, 2, 7, 8]:  # pelvis, hips, ankles
+        for ch in range(2):  # first 2 components
+            sig = rot6d[:, j_idx, ch] - rot6d[:, j_idx, ch].mean()
+            ac = np.correlate(sig, sig, mode='full')
+            ac = ac[T-1:] / (ac[T-1] + 1e-8)
+            max_lag = min(90, len(ac))
+            ac_trunc = ac[1:max_lag]
+            if len(ac_trunc) > 0:
+                regularity_list.extend([
+                    ac_trunc.max(),
+                    ac_trunc.mean(),
+                    np.argmax(ac_trunc) / 30.0,
+                ])
+            else:
+                regularity_list.extend([0.0, 0.0, 0.0])
+    regularity_features = np.array(regularity_list, dtype=np.float32)  # (30,)
+
+    # ── 7b. Stride variability (PD = more variable strides) ──────────────
+    # Split walk into segments and measure variability
+    seg_len = min(60, T)
+    n_segs = max(1, T // seg_len)
+    seg_energies = []
+    for i in range(n_segs):
+        seg = flat[i*seg_len:(i+1)*seg_len]
+        seg_energies.append(np.abs(np.diff(seg, axis=0)).mean())
+    stride_var = np.array([
+        np.std(seg_energies) if len(seg_energies) > 1 else 0.0,
+        np.mean(seg_energies),
+        float(n_segs),
+    ], dtype=np.float32)  # (3,)
+>>>>>>> REPLACE
+</DIFF>
+
+<DIFF>
+<<<<<<< SEARCH
+    # ── 8. Walk duration and sequence-level features ──────────────────────
+    walk_features = np.array([
+        T / 30.0,                          # walk duration (seconds)
+        np.abs(vel).mean(),                # mean absolute velocity (all joints)
+        vel_std.mean(),                    # mean velocity std
+        acc_std.mean(),                    # mean acceleration std
+    ])  # (4,)
+
+    return np.concatenate([
+        mean_feat, std_feat, range_feat,
+        vel_mean, vel_std, vel_max,
+        acc_std,
+        kj_vel_mean, kj_vel_std,
+        asym_features,
+        fft_features,
+        ankle_features,
+        regularity_features,
+        walk_features,
+    ]).astype(np.float32)
+=======
+    # ── 8. Walk duration and sequence-level features ──────────────────────
+    walk_features = np.array([
+        T / 30.0,                          # walk duration (seconds)
+        np.log1p(T),                       # log duration
+        np.abs(vel).mean(),                # mean absolute velocity (all joints)
+        vel_std.mean(),                    # mean velocity std
+        acc_std.mean(),                    # mean acceleration std
+        np.abs(vel).sum() / (T + 1e-8),   # normalized total displacement
+        (vel**2).sum() / (T + 1e-8),      # normalized kinetic energy proxy
+    ])  # (7,)
+
+    # ── 9. Per-joint ROM (range of motion) ────────────────────────────────
+    rom_joints = [0, 1, 2, 4, 5, 7, 8, 10, 11, 16, 17, 18, 19]
+    rom_features = []
+    for j in rom_joints:
+        joint_data = rot6d[:, j, :]  # (T, 6)
+        rom = joint_data.max(0) - joint_data.min(0)  # (6,)
+        rom_features.append(rom)
+    rom_features = np.concatenate(rom_features)  # (78,)
+
+    return np.concatenate([
+        mean_feat, std_feat, range_feat,
+        q25_feat, q75_feat, iqr_feat, cv_feat,
+        vel_mean, vel_std, vel_max,
+        acc_std, acc_mean, jerk_rms,
+        kj_vel_mean, kj_vel_std, kj_energy,
+        asym_features,
+        coord_features,
+        fft_features,
+        ankle_features,
+        regularity_features,
+        stride_var,
+        walk_features,
+        rom_features,
+    ]).astype(np.float32)
+>>>>>>> REPLACE
+</DIFF>
+
+<DIFF>
+<<<<<<< SEARCH
+def train_sklearn_ensemble(X_train: np.ndarray, y_train: np.ndarray,
+                           X_test: np.ndarray) -> np.ndarray:
+    """
+    Train a sklearn ensemble on handcrafted features.
+    Uses RandomForest + GradientBoosting with class weighting.
+    This is the primary classifier for the handcrafted feature path.
+    """
+    from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier, VotingClassifier
+    from sklearn.preprocessing import StandardScaler
+    from sklearn.pipeline import Pipeline
+
+    # Handle NaN/Inf in features
+    X_train = np.nan_to_num(X_train, nan=0.0, posinf=0.0, neginf=0.0)
+    X_test = np.nan_to_num(X_test, nan=0.0, posinf=0.0, neginf=0.0)
+
+    n_cls = 3
+    counts = np.bincount(y_train, minlength=n_cls).astype(float)
+    counts = np.where(counts == 0, 1.0, counts)
+    class_weight = {i: counts.sum() / (n_cls * counts[i]) for i in range(n_cls)}
+
+    rf = Pipeline([
+        ('scaler', StandardScaler()),
+        ('clf', RandomForestClassifier(
+            n_estimators=300,
+            max_depth=None,
+            min_samples_leaf=2,
+            class_weight=class_weight,
+            random_state=42,
+            n_jobs=-1,
+        ))
+    ])
+
+    gb = Pipeline([
+        ('scaler', StandardScaler()),
+        ('clf', GradientBoostingClassifier(
+            n_estimators=200,
+            max_depth=4,
+            learning_rate=0.05,
+            subsample=0.8,
+            random_state=42,
+        ))
+    ])
+
+    # Soft voting ensemble
+    ensemble = VotingClassifier(
+        estimators=[('rf', rf), ('gb', gb)],
+        voting='soft',
+    )
+
+    ensemble.fit(X_train, y_train)
+    return ensemble.predict(X_test)
+=======
+def train_sklearn_ensemble(X_train: np.ndarray, y_train: np.ndarray,
+                           X_test: np.ndarray) -> np.ndarray:
+    """
+    Train a sklearn ensemble on handcrafted features.
+    Uses RF + ExtraTrees + SVM + GradientBoosting with proper class weighting.
+    """
+    from sklearn.ensemble import (RandomForestClassifier, ExtraTreesClassifier,
+                                  GradientBoostingClassifier, VotingClassifier)
+    from sklearn.svm import SVC
+    from sklearn.preprocessing import StandardScaler
+    from sklearn.pipeline import Pipeline
+
+    # Handle NaN/Inf in features
+    X_train = np.nan_to_num(X_train, nan=0.0, posinf=0.0, neginf=0.0)
+    X_test = np.nan_to_num(X_test, nan=0.0, posinf=0.0, neginf=0.0)
+
+    # Remove near-zero variance features
+    train_std = X_train.std(axis=0)
+    keep_mask = train_std > 1e-7
+    X_train = X_train[:, keep_mask]
+    X_test = X_test[:, keep_mask]
+
+    n_cls = 3
+    counts = np.bincount(y_train, minlength=n_cls).astype(float)
+    counts = np.where(counts == 0, 1.0, counts)
+    class_weight = {i: counts.sum() / (n_cls * counts[i]) for i in range(n_cls)}
+
+    # Oversample class 2 for GB which doesn't support class_weight
+    idx2 = np.where(y_train == 2)[0]
+    idx1 = np.where(y_train == 1)[0]
+    n_class0 = (y_train == 0).sum()
+    n_repeat2 = max(1, round(n_class0 / max(1, len(idx2))))
+    n_repeat1 = max(1, round(n_class0 / max(1, len(idx1))))
+    aug_idx = np.concatenate([
+        np.arange(len(y_train)),
+        np.tile(idx2, n_repeat2 - 1),
+        np.tile(idx1, max(0, n_repeat1 - 1)),
+    ])
+    X_train_os = X_train[aug_idx]
+    y_train_os = y_train[aug_idx]
+
+    rf = Pipeline([
+        ('scaler', StandardScaler()),
+        ('clf', RandomForestClassifier(
+            n_estimators=500,
+            max_depth=None,
+            min_samples_leaf=2,
+            class_weight='balanced',
+            random_state=42,
+            n_jobs=-1,
+        ))
+    ])
+
+    et = Pipeline([
+        ('scaler', StandardScaler()),
+        ('clf', ExtraTreesClassifier(
+            n_estimators=500,
+            max_depth=None,
+            min_samples_leaf=2,
+            class_weight='balanced',
+            random_state=123,
+            n_jobs=-1,
+        ))
+    ])
+
+    svm = Pipeline([
+        ('scaler', StandardScaler()),
+        ('clf', SVC(
+            kernel='rbf',
+            C=10.0,
+            gamma='scale',
+            class_weight='balanced',
+            probability=True,
+            random_state=42,
+        ))
+    ])
+
+    gb = Pipeline([
+        ('scaler', StandardScaler()),
+        ('clf', GradientBoostingClassifier(
+            n_estimators=300,
+            max_depth=4,
+            learning_rate=0.05,
+            subsample=0.8,
+            min_samples_leaf=5,
+            random_state=42,
+        ))
+    ])
+
+    # Fit RF, ET, SVM on original (with class_weight), GB on oversampled
+    rf.fit(X_train, y_train)
+    et.fit(X_train, y_train)
+    svm.fit(X_train, y_train)
+    gb.fit(X_train_os, y_train_os)
+
+    # Manual soft voting
+    prob_rf = rf.predict_proba(X_test)
+    prob_et = et.predict_proba(X_test)
+    prob_svm = svm.predict_proba(X_test)
+    prob_gb = gb.predict_proba(X_test)
+
+    # Weighted average (give more weight to tree-based methods)
+    avg_prob = 0.3 * prob_rf + 0.25 * prob_et + 0.2 * prob_svm + 0.25 * prob_gb
+    return avg_prob.argmax(axis=1)
+>>>>>>> REPLACE
+</DIFF>
+
+<DIFF>
+<<<<<<< SEARCH
+    # Optionally concatenate MotionCLIP features
+    enc = load_motionclip(care_pd_dir)
+    if enc is not None:
+        print(f'[genome] Adding MotionCLIP features (device={DEVICE})', flush=True)
+        try:
+            mc_tr = extract_motionclip_features(enc, train_poses)  # (N_train, 512)
+            mc_te = extract_motionclip_features(enc, test_poses)   # (N_test, 512)
+            feat_tr = np.concatenate([feat_tr, mc_tr], axis=1)
+            feat_te = np.concatenate([feat_te, mc_te], axis=1)
+            print(f'[genome] Combined features: {feat_tr.shape[1]} dims', flush=True)
+        except Exception as e:
+            print(f'[genome] MotionCLIP feature extraction failed: {e}', flush=True)
+=======
+    # Optionally concatenate MotionCLIP features (mean + std across windows)
+    enc = load_motionclip(care_pd_dir)
+    if enc is not None:
+        print(f'[genome] Adding MotionCLIP features (device={DEVICE})', flush=True)
+        try:
+            mc_tr = extract_motionclip_features(enc, train_poses)  # (N_train, 512)
+            mc_te = extract_motionclip_features(enc, test_poses)   # (N_test, 512)
+            mc_std_tr = extract_motionclip_std_features(enc, train_poses)  # (N_train, 512)
+            mc_std_te = extract_motionclip_std_features(enc, test_poses)   # (N_test, 512)
+            feat_tr = np.concatenate([feat_tr, mc_tr, mc_std_tr], axis=1)
+            feat_te = np.concatenate([feat_te, mc_te, mc_std_te], axis=1)
+            print(f'[genome] Combined features: {feat_tr.shape[1]} dims', flush=True)
+        except Exception as e:
+            print(f'[genome] MotionCLIP feature extraction failed: {e}', flush=True)
+>>>>>>> REPLACE
+</DIFF>
+
+<DIFF>
+<<<<<<< SEARCH
+    print(f'[genome] Training sklearn ensemble (RF+GB) on {feat_tr.shape[1]}-dim features', flush=True)
+    return train_sklearn_ensemble(feat_tr, y_train, feat_te)
+=======
+    print(f'[genome] Training sklearn ensemble on {feat_tr.shape[1]}-dim features', flush=True)
+    return train_sklearn_ensemble(feat_tr, y_train, feat_te)
+>>>>>>> REPLACE
+</DIFF>
+
+Now I need to add the `extract_motionclip_std_features` function:
+
+<DIFF>
+<<<<<<< SEARCH
+def train_and_predict(train_poses: list, y_train: np.ndarray,
+=======
+@torch.no_grad()
+def extract_motionclip_std_features(encoder: nn.Module, poses: list) -> np.ndarray:
+    """
+    Extract std of MotionCLIP embeddings across windows (gait variability).
+    """
+    embs = []
+    for pose in poses:
+        rot6d = smpl_to_6d(pose)
+        windows = get_sliding_windows(rot6d, window_size=60, step=30)
+        x = torch.from_numpy(windows).float().to(DEVICE)
+        window_embs = encoder(x)  # (N_w, 512)
+        if window_embs.shape[0] > 1:
+            std_emb = window_embs.std(0, keepdim=True).cpu().numpy()
+        else:
+            std_emb = np.zeros((1, 512), dtype=np.float32)
+        embs.append(std_emb)
+    return np.vstack(embs)
+
+
+def train_and_predict(train_poses: list, y_train: np.ndarray,
+>>>>>>> REPLACE
+</DIFF>

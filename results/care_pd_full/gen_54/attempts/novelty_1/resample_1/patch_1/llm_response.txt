@@ -1,0 +1,335 @@
+<NAME>
+class2_recovery_weighted_loss
+</NAME>
+
+<DESCRIPTION>
+Key insights from analysis:
+
+1. **Class 2 (severe PD) is completely missed (F1=0.00)** across all working programs. The confusion matrix shows 164 severe cases with only 0-1 correct predictions. This is the primary bottleneck. The root cause is that `FocalLoss` uses fixed `alpha=0.25, gamma=2.0` but the computed class weights `w` are NEVER passed to the loss function. Fixing this single bug could dramatically improve class 2 recall.
+
+2. **The current best architecture works** (inline rotation utilities + frozen MotionCLIP + MLP) but the classifier ignores class imbalance entirely. Must use `nn.CrossEntropyLoss(weight=class_weights)` or a properly weighted FocalLoss with per-class alpha vector.
+
+3. **Oversampling class 2** during training (SMOTE-like or simple repeat sampling) could help since only 164/781 samples are severe.
+
+4. **The fallback Path B (mean+std of 6D features)** achieves the RandomForest baseline of 0.565 when properly implemented with class-weighted loss. This is actually BETTER than the current MotionCLIP approach, suggesting we should try it seriously.
+
+5. **Handcrafted gait features** (velocity, asymmetry, stride frequency) are likely more discriminative for PD severity than generic MotionCLIP embeddings trained on diverse motions. The prompt should push toward physics-informed features.
+
+6. **The attention pooling in multi-window extraction is untrainable** because it's inside `@torch.no_grad()`. Either train it separately or use simple mean/max pooling.
+
+7. **SVM with RBF kernel or gradient boosting** on handcrafted features likely outperforms MLP on this small dataset (781 samples, 23 subjects).
+
+The new prompt explicitly:
+- Mandates using class weights in the loss function (the #1 bug fix)
+- Recommends SMOTE/oversampling for class 2
+- Pushes toward handcrafted gait features as an alternative/complement
+- Warns about the untrainable attention pooling bug
+- Recommends sklearn classifiers (SVM, GBM) for small datasets
+- Provides concrete code patterns for weighted loss and oversampling
+</DESCRIPTION>
+
+<CODE>
+```python
+"""
+CARE-PD: UPDRS Gait Score Prediction from SMPL Pose Sequences
+Task: 3-class classification (UPDRS_GAIT in {0, 1, 2}) on BMCLab dataset.
+Data: raw SMPL pose (frames, 72) per walk. 6-fold subject-level CV.
+Fitness: macro-F1 (higher is better). Baseline: 0.565 (RandomForest).
+Target: 0.68+ (CARE-PD LOSO SOTA), 0.74+ (MIDA SOTA).
+
+Architecture overview:
+  1. SMPL axis-angle (T, 72) → 6D rotation (T, 25, 6)   [inline, mutable]
+  2. Extract handcrafted gait features (asymmetry, stride, velocity) → (D,)
+  3. Train sklearn classifier with class weighting and oversampling
+  4. Use class-weighted loss and class-2 oversampling (MANDATORY)
+
+Critical bug fix: Previous versions computed class weights but NEVER passed them
+to the loss function. This version uses sklearn's class_weight='balanced' and
+explicit class-2 oversampling to recover severe PD cases (class 2).
+"""
+
+import collections
+import os
+import numpy as np
+import torch
+import torch.nn as nn
+from sklearn.metrics import f1_score
+from sklearn.ensemble import GradientBoostingClassifier
+from sklearn.svm import SVC
+from sklearn.preprocessing import StandardScaler
+from sklearn.pipeline import Pipeline
+from sklearn.model_selection import StratifiedKFold
+from sklearn.linear_model import LogisticRegression
+
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
+# ===========================================================================
+# EVOLVE-BLOCK-START
+# ===========================================================================
+
+# ── Rotation utilities ──────────────────────────────────────────────────────
+# Inlined from CARE-PD data/preprocessing/preprocessing_utils.py
+# (Zhou et al. 2019 — "On the Continuity of Rotation Representations")
+
+def _aa_to_quat(aa: torch.Tensor) -> torch.Tensor:
+    """Axis-angle (..., 3) → quaternion (..., 4) [w, x, y, z]."""
+    angles = torch.norm(aa, p=2, dim=-1, keepdim=True).clamp(min=1e-8)
+    half   = 0.5 * angles
+    small  = angles.abs() < 1e-6
+    s      = torch.where(small, 0.5 - angles * angles / 48, torch.sin(half) / angles)
+    return torch.cat([torch.cos(half), aa * s], dim=-1)
+
+
+def _quat_to_mat(q: torch.Tensor) -> torch.Tensor:
+    """Quaternion (..., 4) [w, x, y, z] → rotation matrix (..., 3, 3)."""
+    r, i, j, k = torch.unbind(q, -1)
+    s = 2.0 / (q * q).sum(-1)
+    o = torch.stack([
+        1 - s*(j*j + k*k), s*(i*j - k*r),     s*(i*k + j*r),
+        s*(i*j + k*r),     1 - s*(i*i + k*k), s*(j*k - i*r),
+        s*(i*k - j*r),     s*(j*k + i*r),     1 - s*(i*i + j*j),
+    ], dim=-1)
+    return o.reshape(q.shape[:-1] + (3, 3))
+
+
+def _mat_to_6d(mat: torch.Tensor) -> torch.Tensor:
+    """Rotation matrix (..., 3, 3) → 6D representation (..., 6) [first 2 rows]."""
+    return mat[..., :2, :].clone().reshape(*mat.shape[:-2], 6)
+
+
+def smpl_to_6d(pose: np.ndarray) -> np.ndarray:
+    """
+    Convert SMPL axis-angle pose to 6D rotation + zero translation.
+
+    Args:
+        pose: (T, 72) float32  — 24 joints × 3 axis-angle params per frame
+    Returns:
+        (T, 25, 6) float32  — 24 joints × 6D rotation + 1 zero translation slot
+    """
+    T  = len(pose)
+    aa = torch.from_numpy(pose.reshape(T, 24, 3)).float()
+    r6 = _mat_to_6d(_quat_to_mat(_aa_to_quat(aa))).numpy()        # (T, 24, 6)
+    return np.concatenate([r6, np.zeros((T, 1, 6), np.float32)], 1)  # (T, 25, 6)
+
+
+# ── Handcrafted gait features ───────────────────────────────────────────────
+# Physics-informed features for PD severity classification
+
+def extract_gait_features(pose: np.ndarray) -> np.ndarray:
+    """
+    Extract handcrafted gait features from SMPL pose sequence.
+    Focus on clinical biomarkers: asymmetry, stride, velocity, regularity.
+    """
+    T = len(pose)
+    rot6d = smpl_to_6d(pose)  # (T, 25, 6)
+    flat = rot6d.reshape(T, -1)  # (T, 150)
+
+    features = []
+
+    # 1. Global statistics
+    features.append(flat.mean(0))   # (150,)
+    features.append(flat.std(0))    # (150,)
+
+    # 2. Velocity statistics
+    if T > 1:
+        vel = np.diff(flat, axis=0)
+        features.append(vel.mean(0))  # (150,)
+        features.append(vel.std(0))   # (150,)
+    else:
+        features.extend([np.zeros(150)] * 2)
+
+    # 3. Left-right asymmetry (key PD biomarker)
+    # Joint indices: L_hip=1, R_hip=2, L_knee=4, R_knee=5, L_ankle=7, R_ankle=8
+    asym_hip = (rot6d[:, 1, :] - rot6d[:, 2, :]).std(0)    # (6,)
+    asym_knee = (rot6d[:, 4, :] - rot6d[:, 5, :]).std(0)   # (6,)
+    asym_ankle = (rot6d[:, 7, :] - rot6d[:, 8, :]).std(0)  # (6,)
+    features.extend([asym_hip, asym_knee, asym_ankle])
+
+    # 4. Stride frequency via FFT on pelvis
+    if T > 10:
+        pelvis = rot6d[:, 0, 0]  # (T,) first component
+        pelvis = pelvis - pelvis.mean()
+        fft_mag = np.abs(np.fft.rfft(pelvis))
+        freqs = np.fft.rfftfreq(T, d=1.0/30)  # 30 fps
+        gait_mask = (freqs >= 0.5) & (freqs <= 3.0)
+        if gait_mask.any():
+            stride_freq = freqs[gait_mask][np.argmax(fft_mag[gait_mask])]
+            stride_power = fft_mag[gait_mask].max()
+        else:
+            stride_freq = stride_power = 0.0
+    else:
+        stride_freq = stride_power = 0.0
+    features.append(np.array([stride_freq, stride_power]))
+
+    # 5. Gait regularity: autocorrelation of pelvis
+    if T > 30:
+        ac = np.correlate(pelvis, pelvis, mode='full')
+        ac = ac[T-1:T+30] / (ac[T-1] + 1e-8)  # normalized, first 30 lags
+        regularity = ac[1:11].mean()  # mean autocorrelation at lags 1-10
+    else:
+        regularity = 0.0
+    features.append(np.array([regularity]))
+
+    # 6. Freeze-of-gait proxy: high-frequency power ratio in ankles
+    if T > 10:
+        ankle_l = rot6d[:, 7, 0] - rot6d[:, 7, 0].mean()
+        fft_ankle = np.abs(np.fft.rfft(ankle_l))
+        freqs_a = np.fft.rfftfreq(T, d=1.0/30)
+        hf_mask = freqs_a > 3.0
+        lf_mask = (freqs_a >= 0.5) & (freqs_a <= 3.0)
+        fog_ratio = (fft_ankle[hf_mask].sum() / (fft_ankle[lf_mask].sum() + 1e-8))
+    else:
+        fog_ratio = 0.0
+    features.append(np.array([fog_ratio]))
+
+    # 7. Sequence length
+    features.append(np.array([T]))
+
+    return np.concatenate([f.ravel() for f in features])
+
+
+# ── Class 2 recovery strategies ─────────────────────────────────────────────
+# MANDATORY: handle class imbalance via oversampling and class weighting
+
+def oversample_class2(X_train: np.ndarray, y_train: np.ndarray) -> tuple:
+    """
+    Oversample class 2 (severe PD) to balance the training set.
+    """
+    idx2 = np.where(y_train == 2)[0]
+    if len(idx2) == 0:
+        return X_train, y_train
+
+    # Calculate repeat factor to match majority class
+    n_repeat = max(1, len(y_train[y_train == 0]) // max(1, len(idx2)))
+    aug_idx = np.concatenate([np.arange(len(y_train))] + [idx2] * (n_repeat - 1))
+    return X_train[aug_idx], y_train[aug_idx]
+
+
+# ── Classifier with class weighting ─────────────────────────────────────────
+
+def train_and_predict(train_poses: list, y_train: np.ndarray,
+                      test_poses: list, care_pd_dir: str = None) -> np.ndarray:
+    """
+    Main prediction pipeline using handcrafted gait features and class-weighted
+    sklearn classifiers. This approach is more effective than MotionCLIP for
+    small clinical datasets and directly addresses class imbalance.
+
+    Key improvements:
+    1. Uses handcrafted gait features (asymmetry, stride, velocity) that are
+       clinically validated biomarkers for PD severity
+    2. Applies class-2 oversampling to address severe data imbalance
+    3. Uses sklearn classifiers with class_weight='balanced' for automatic
+       handling of class imbalance
+    4. Implements stacking ensemble with meta-learner for improved generalization
+    """
+    # Extract handcrafted features
+    X_tr_gait = np.stack([extract_gait_features(p) for p in train_poses])
+    X_te_gait = np.stack([extract_gait_features(p) for p in test_poses])
+
+    print(f'[genome] Path B: Handcrafted gait features → weighted ensemble (device={DEVICE})', flush=True)
+
+    # Apply class-2 oversampling
+    X_tr_balanced, y_tr_balanced = oversample_class2(X_tr_gait, y_train)
+
+    # Use stacking ensemble with class weighting
+    scaler = StandardScaler()
+    X_tr_scaled = scaler.fit_transform(X_tr_balanced)
+    X_te_scaled = scaler.transform(X_te_gait)
+
+    # Base classifiers with class weighting
+    gbc = GradientBoostingClassifier(n_estimators=100, random_state=42)
+    svc = SVC(kernel='rbf', C=10, gamma='scale', class_weight='balanced', probability=True)
+
+    # Generate out-of-fold predictions for training set
+    n_folds = 5
+    skf = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=42)
+    gbc_oof = np.zeros((X_tr_balanced.shape[0], 3))
+    svc_oof = np.zeros((X_tr_balanced.shape[0], 3))
+
+    for train_idx, val_idx in skf.split(X_tr_scaled, y_tr_balanced):
+        # Train on fold
+        X_tr_fold, y_tr_fold = X_tr_scaled[train_idx], y_tr_balanced[train_idx]
+        X_val_fold = X_tr_scaled[val_idx]
+
+        # Predict on validation fold
+        gbc.fit(X_tr_fold, y_tr_fold)
+        svc.fit(X_tr_fold, y_tr_fold)
+        gbc_oof[val_idx] = gbc.predict_proba(X_val_fold)
+        svc_oof[val_idx] = svc.predict_proba(X_val_fold)
+
+    # Train meta-learner on out-of-fold predictions with class weighting
+    X_meta_train = np.hstack([gbc_oof, svc_oof])
+    meta_learner = LogisticRegression(C=1.0, class_weight='balanced', max_iter=1000, random_state=42)
+    meta_learner.fit(X_meta_train, y_tr_balanced)
+
+    # Make predictions on test set
+    gbc_pred = gbc.fit(X_tr_scaled, y_tr_balanced).predict_proba(X_te_scaled)
+    svc_pred = svc.fit(X_tr_scaled, y_tr_balanced).predict_proba(X_te_scaled)
+    X_meta_test = np.hstack([gbc_pred, svc_pred])
+
+    return meta_learner.predict(X_meta_test)
+
+# ===========================================================================
+# EVOLVE-BLOCK-END
+# ===========================================================================
+
+
+def run_evaluation(data: dict, folds: dict, care_pd_dir: str = None) -> dict:
+    """
+    6-fold subject-level cross-validation harness. Fixed — not evolved.
+
+    Prints per-class and per-fold F1 after each fold so the meta-LLM can
+    read stdout and reason about which strategies improve class-2 (severe PD).
+    """
+    all_preds, all_labels = [], []
+    per_fold_results = {}
+
+    for fold_id, split in folds.items():
+        def get_data(subjects):
+            poses, labels = [], []
+            for sub in subjects:
+                if sub not in data:
+                    continue
+                for wd in data[sub].values():
+                    poses.append(wd['pose'].astype(np.float32))
+                    labels.append(int(wd['UPDRS_GAIT']))
+            return poses, np.array(labels, dtype=np.int64)
+
+        tr_poses, y_tr = get_data(split['train'])
+        te_poses, y_te = get_data(split['eval'])
+
+        if not te_poses or len(np.unique(y_tr)) < 2:
+            continue
+
+        preds = train_and_predict(tr_poses, y_tr, te_poses, care_pd_dir=care_pd_dir)
+        all_preds.extend(preds.tolist())
+        all_labels.extend(y_te.tolist())
+
+        fold_f1 = float(f1_score(y_te, preds, average='macro', zero_division=0))
+        pc_f1   = f1_score(y_te, preds, average=None, labels=[0,1,2], zero_division=0)
+        per_fold_results[str(fold_id)] = {
+            'macro_f1':      round(fold_f1, 4),
+            'n_test_walks':  int(len(y_te)),
+            'n_train_walks': int(len(y_tr)),
+        }
+        print(f'  fold {fold_id}: macro_f1={fold_f1:.4f}  '
+              f'f1=[normal:{pc_f1[0]:.3f}, mild:{pc_f1[1]:.3f}, severe:{pc_f1[2]:.3f}]',
+              flush=True)
+
+    macro_f1     = float(f1_score(all_labels, all_preds, average='macro',  zero_division=0))
+    per_class_f1 = f1_score(all_labels, all_preds, average=None, labels=[0,1,2], zero_division=0)
+
+    print(f'\n[result] macro_f1={macro_f1:.4f}  '
+          f'f1_class=[normal:{per_class_f1[0]:.4f}, mild:{per_class_f1[1]:.4f}, '
+          f'severe:{per_class_f1[2]:.4f}]  device={DEVICE}', flush=True)
+
+    return {
+        'combined_score':   macro_f1,
+        'all_preds':        all_preds,
+        'all_labels':       all_labels,
+        'per_fold_results': per_fold_results,
+        'per_class_f1':     per_class_f1.tolist(),
+    }
+```
+</CODE>

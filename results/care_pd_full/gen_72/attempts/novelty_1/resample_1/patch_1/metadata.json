@@ -1,0 +1,14 @@
+{
+  "generation": 72,
+  "novelty_attempt": 1,
+  "resample_attempt": 1,
+  "patch_attempt": 1,
+  "success": true,
+  "num_applied": 1,
+  "patch_name": "hybrid_stacking_optimized",
+  "patch_description": "This crossover combines the best elements from the top-performing programs:\n\n1. **Feature extraction from the 0.63 program**: Uses the comprehensive handcrafted gait features including velocity/acceleration stats, L-R asymmetry, ROM, FFT stride frequency, gait regularity, and freeze-of-gait proxies. The simpler VotingClassifier ensemble achieved 0.63.\n\n2. **Stacking meta-learner from the 0.61 program**: The stacking approach (GBC + SVC \u2192 LogisticRegression meta-learner) showed promise for class 2 detection (0.45 F1). We keep this but add RandomForest as a third base learner.\n\n3. **Key improvements**:\n   - Add RandomForest as a third base classifier in the stacking ensemble (from the 0.60 program which showed RF helps)\n   - Use enhanced class weights with 2x boost for class 2 (severe PD) since all programs struggle most there\n   - Add MotionCLIP multi-window features with batch processing for speed\n   - Include the joint coordination/coupling features from the 0.61 program (cross-correlation, pelvis-ankle coupling)\n   - Use GBC with sample_weight for proper class weighting (GBC doesn't support class_weight directly)\n   - Batch MotionCLIP window processing to reduce GPU overhead and stay within time limits\n   - Clean NaN/inf from features before scaling\n\nThe goal is to push class 2 F1 above 0.50 while maintaining class 0 and 1 performance, targeting macro-F1 > 0.65.",
+  "error_msg": null,
+  "timestamp": "2026-04-06T21:47:48.780955",
+  "llm_cost": 0.434445,
+  "llm_model": null
+}

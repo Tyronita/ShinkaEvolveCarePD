@@ -1,0 +1,14 @@
+{
+  "generation": 56,
+  "novelty_attempt": 1,
+  "resample_attempt": 1,
+  "patch_attempt": 1,
+  "success": true,
+  "num_applied": 1,
+  "patch_name": "add_bilateral_coordination_features",
+  "patch_description": "The current feature set lacks explicit measures of bilateral coordination breakdown, a key clinical sign in PD gait that worsens with severity. I propose adding cross-correlation features between left/right joint rotation signals across key gait joints (hips, knees, ankles, pelvis-ankle coupling) at multiple lags. Additionally, the ratio of pelvis-to-ankle rotation variance is added as a proximal-distal coupling proxy. These features capture the deterioration of coordinated movement patterns in severe PD, providing discriminative signal for class 2. The 96 new features are appended to the existing handcrafted feature vector within extract_gait_features, following the proven architecture of handcrafted features \u2192 soft-voting ensemble.",
+  "error_msg": null,
+  "timestamp": "2026-04-06T19:06:29.366651",
+  "llm_cost": 0.00745591,
+  "llm_model": null
+}

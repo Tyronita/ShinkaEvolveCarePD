@@ -1,0 +1,130 @@
+<NAME>
+calibrated_rf_gb_ensemble_v3
+</NAME>
+
+<DESCRIPTION>
+The current best program (score=0.6551) achieves a significant boost by applying isotonic calibration to the Random Forest classifier within a soft-voting ensemble. This calibration corrects the RF's poorly calibrated probabilities, especially for the minority severe class, allowing the ensemble to assign higher and more accurate probabilities to severe PD cases.
+
+The current program under test (score=0.60) uses the same RF+GB ensemble structure but lacks this critical calibration step. It also uses suboptimal hyperparameters (n_estimators=300, min_samples_leaf=2) compared to the proven best (n_estimators=500, min_samples_leaf=1).
+
+I propose to upgrade the `train_sklearn_ensemble` function to match the current best architecture exactly:
+1. Import `CalibratedClassifierCV` and wrap the RF pipeline with it using `method='isotonic'` and `cv=3`.
+2. Update the RF hyperparameters to `n_estimators=500` and `min_samples_leaf=1` to produce better base probabilities for calibration.
+3. Keep the GB pipeline unchanged as its probabilities are already well-calibrated.
+
+This change directly addresses the primary bottleneck of severe class under-prediction by improving probability calibration, which is the single most impactful improvement observed in the program history (0.6356 → 0.6551). The change is minimal and targets only the classifier training function, preserving the proven feature extraction pipeline.
+</DESCRIPTION>
+
+<DIFF>
+<<<<<<< SEARCH
+def train_sklearn_ensemble(X_train: np.ndarray, y_train: np.ndarray,
+                           X_test: np.ndarray) -> np.ndarray:
+    """
+    Train a sklearn ensemble on handcrafted features.
+    Uses RandomForest + GradientBoosting with class weighting.
+    This is the primary classifier for the handcrafted feature path.
+    """
+    from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier, VotingClassifier
+    from sklearn.preprocessing import StandardScaler
+    from sklearn.pipeline import Pipeline
+
+    # Handle NaN/Inf in features
+    X_train = np.nan_to_num(X_train, nan=0.0, posinf=0.0, neginf=0.0)
+    X_test = np.nan_to_num(X_test, nan=0.0, posinf=0.0, neginf=0.0)
+
+    n_cls = 3
+    counts = np.bincount(y_train, minlength=n_cls).astype(float)
+    counts = np.where(counts == 0, 1.0, counts)
+    class_weight = {i: counts.sum() / (n_cls * counts[i]) for i in range(n_cls)}
+
+    rf = Pipeline([
+        ('scaler', StandardScaler()),
+        ('clf', RandomForestClassifier(
+            n_estimators=300,
+            max_depth=None,
+            min_samples_leaf=2,
+            class_weight=class_weight,
+            random_state=42,
+            n_jobs=-1,
+        ))
+    ])
+
+    gb = Pipeline([
+        ('scaler', StandardScaler()),
+        ('clf', GradientBoostingClassifier(
+            n_estimators=200,
+            max_depth=4,
+            learning_rate=0.05,
+            subsample=0.8,
+            random_state=42,
+        ))
+    ])
+
+    # Soft voting ensemble
+    ensemble = VotingClassifier(
+        estimators=[('rf', rf), ('gb', gb)],
+        voting='soft',
+    )
+
+    ensemble.fit(X_train, y_train)
+    return ensemble.predict(X_test)
+=======
+def train_sklearn_ensemble(X_train: np.ndarray, y_train: np.ndarray,
+                           X_test: np.ndarray) -> np.ndarray:
+    """
+    Train a sklearn ensemble on handcrafted features.
+    Uses Calibrated RandomForest + GradientBoosting with class weighting.
+    This is the primary classifier for the handcrafted feature path.
+    """
+    from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier, VotingClassifier
+    from sklearn.preprocessing import StandardScaler
+    from sklearn.pipeline import Pipeline
+    from sklearn.calibration import CalibratedClassifierCV  # CRITICAL for severe class
+
+    # Handle NaN/Inf in features
+    X_train = np.nan_to_num(X_train, nan=0.0, posinf=0.0, neginf=0.0)
+    X_test = np.nan_to_num(X_test, nan=0.0, posinf=0.0, neginf=0.0)
+
+    n_cls = 3
+    counts = np.bincount(y_train, minlength=n_cls).astype(float)
+    counts = np.where(counts == 0, 1.0, counts)
+    class_weight = {i: counts.sum() / (n_cls * counts[i]) for i in range(n_cls)}
+
+    # RF base pipeline with optimal parameters for calibration
+    rf_base = Pipeline([
+        ('scaler', StandardScaler()),
+        ('clf', RandomForestClassifier(
+            n_estimators=500,           # larger forest for better probability estimates
+            max_depth=None,
+            min_samples_leaf=1,         # deeper trees for finer-grained splits
+            class_weight=class_weight,
+            random_state=42,
+            n_jobs=-1,
+        ))
+    ])
+    # Wrap RF with isotonic calibration - corrects probability estimates
+    # This is the key improvement that boosted score from 0.6356 to 0.6551
+    rf = CalibratedClassifierCV(rf_base, method='isotonic', cv=3)
+
+    # GB pipeline - no calibration needed (already well-calibrated)
+    gb = Pipeline([
+        ('scaler', StandardScaler()),
+        ('clf', GradientBoostingClassifier(
+            n_estimators=200,
+            max_depth=4,
+            learning_rate=0.05,
+            subsample=0.8,
+            random_state=42,
+        ))
+    ])
+
+    # Soft voting ensemble - calibrated RF now properly weights severe class
+    ensemble = VotingClassifier(
+        estimators=[('rf', rf), ('gb', gb)],
+        voting='soft',
+    )
+
+    ensemble.fit(X_train, y_train)
+    return ensemble.predict(X_test)
+>>>>>>> REPLACE
+</DIFF>

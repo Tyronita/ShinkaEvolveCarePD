@@ -1,0 +1,14 @@
+{
+  "generation": 29,
+  "novelty_attempt": 1,
+  "resample_attempt": 1,
+  "patch_attempt": 1,
+  "success": true,
+  "num_applied": 4,
+  "patch_name": "hybrid_features_sklearn_ensemble",
+  "patch_description": "The current program uses MotionCLIP features with an MLP classifier, achieving 0.45 macro-F1. However, previous analysis shows that handcrafted gait features with sklearn classifiers (RandomForest/GradientBoosting) are far more effective for this small, imbalanced dataset, with a baseline of 0.565 and a best hybrid result of 0.62.\n\nThe key insight is that MotionCLIP features alone (0.41-0.45) are insufficient. We must make handcrafted features the primary approach and only optionally enhance with MotionCLIP.\n\nThis change replaces the entire classification pipeline with:\n1. A comprehensive handcrafted gait feature extractor (as proven in the 0.62 program)\n2. An sklearn ensemble (RandomForest + GradientBoosting) with proper class weighting\n3. Optional concatenation with MotionCLIP features for hybrid benefit\n4. Removal of the problematic attention pooling and FocalLoss\n\nThe fallback path is eliminated because handcrafted features are always available and superior.",
+  "error_msg": null,
+  "timestamp": "2026-04-06T15:37:08.278635",
+  "llm_cost": 0.0056003,
+  "llm_model": null
+}

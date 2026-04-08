@@ -1,0 +1,14 @@
+{
+  "generation": 12,
+  "novelty_attempt": 1,
+  "resample_attempt": 1,
+  "patch_attempt": 1,
+  "success": true,
+  "num_applied": 1,
+  "patch_name": "fix_class_weights_and_improve_classifier",
+  "patch_description": "The critical bug: class weights `w` are computed (inverse frequency) but never passed to FocalLoss, which uses a scalar alpha=0.25 treating all classes equally. This causes class 2 (severe PD, fewest samples) to get F1=0.00.\n\nFix: Replace FocalLoss with nn.CrossEntropyLoss(weight=w) to properly upweight the minority class. Also:\n1. Increase epochs to 300 for better convergence with weighted loss\n2. Add label smoothing to reduce overconfidence on majority classes\n3. Use a deeper MLP with batch norm for better feature learning\n4. Add oversampling of minority class during training batches",
+  "error_msg": null,
+  "timestamp": "2026-04-06T14:36:18.659924",
+  "llm_cost": 0.083094,
+  "llm_model": null
+}

@@ -1,0 +1,14 @@
+{
+  "generation": 77,
+  "novelty_attempt": 1,
+  "resample_attempt": 1,
+  "patch_attempt": 1,
+  "success": true,
+  "num_applied": 1,
+  "patch_name": "calibrated_rf_gb_ensemble_with_improved_features",
+  "patch_description": "Based on the analysis of prior programs, the key improvements are:\n\n1. **CalibratedClassifierCV with isotonic regression on RF**: This was the single most impactful change in the best-performing program (0.6356 \u2192 0.6551). RF probability estimates are systematically biased for minority classes. Isotonic regression corrects this non-parametrically, causing the soft-voting ensemble to assign higher probability to severe cases.\n\n2. **RF hyperparameters: n_estimators=500, min_samples_leaf=1**: Larger, deeper forest provides better probability estimates for calibration to work on.\n\n3. **Feature extraction aligned with the proven 1389-dim feature set**: The current program uses 150-dim flat features (including the zero translation joint), while the best program uses 144-dim (24 joints \u00d7 6D, excluding translation). Also adding bilateral cross-correlation features and jerk features to target the severe class.\n\n4. **Remove the 1.2x class_weight boost for severe**: The calibration handles this better.\n\nThe changes target the `extract_gait_features` function to match the proven feature set, and the `train_and_predict` function to add CalibratedClassifierCV wrapping.",
+  "error_msg": null,
+  "timestamp": "2026-04-06T22:44:55.646434",
+  "llm_cost": 0.33843,
+  "llm_model": null
+}

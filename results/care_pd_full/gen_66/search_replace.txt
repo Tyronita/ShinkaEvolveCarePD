@@ -1,0 +1,76 @@
+<NAME>
+add_temporal_segmentation_features
+</NAME>
+
+<DESCRIPTION>
+The current handcrafted features compute statistics over the entire gait sequence, which may miss dynamic changes such as freezing-of-gait episodes or fatigue-induced deterioration in severe PD patients. To capture within-walk temporal patterns, we add a new feature block that splits the sequence into 4 non-overlapping quarters and computes per-segment mean and std for both pose and velocity. Then, we compute the standard deviation across segment means and segment stds, resulting in 288 dimensions per signal type.
+
+This change specifically targets class 2 (severe PD) by modeling fluctuations in gait dynamics over time—key indicators of advanced disease like inconsistent stride patterns and intermittent freezing. These features are concatenated at the end of `extract_gait_features` and will improve discrimination between mild and severe cases, especially in folds where current F1 for class 2 is low (e.g., fold 1: 0.35, fold 5: 0.31). The feature vector remains fully compatible with the sklearn pipeline and benefits from class weighting.
+</DESCRIPTION>
+
+<DIFF>
+<<<<<<< SEARCH
+    # 8. Sequence-level features
+    duration = T / 30.0
+    step_features = np.array([duration, np.log1p(T)])
+    features.append(step_features)
+
+    return np.concatenate([f.ravel() for f in features])
+=======
+    # 8. Sequence-level features
+    duration = T / 30.0
+    step_features = np.array([duration, np.log1p(T)])
+    features.append(step_features)
+
+    # 9. Temporal segmentation features to capture within-walk deterioration
+    # Split sequence into 4 non-overlapping segments
+    n_segments = 4
+    segment_len = T // n_segments
+    segment_means = []
+    segment_stds = []
+
+    for i in range(n_segments):
+        start = i * segment_len
+        end = start + segment_len if i < n_segments - 1 else T
+        if start < end:
+            seg_flat = flat[start:end]
+            segment_means.append(seg_flat.mean(axis=0))
+            segment_stds.append(seg_flat.std(axis=0))
+        else:
+            segment_means.append(np.zeros(flat.shape[1]))
+            segment_stds.append(np.zeros(flat.shape[1]))
+
+    # Variability across segments — captures gait instability
+    if len(segment_means) > 1:
+        seg_mean_var = np.std(segment_means, axis=0)  # (144,) — changes in posture
+        seg_std_var = np.std(segment_stds, axis=0)    # (144,) — changes in variability
+    else:
+        seg_mean_var = np.zeros(flat.shape[1])
+        seg_std_var = np.zeros(flat.shape[1])
+
+    features.append(seg_mean_var)
+    features.append(seg_std_var)
+
+    # Repeat for velocity if available
+    if T > 1:
+        vel_segments = []
+        for i in range(n_segments):
+            start = i * segment_len
+            end = start + segment_len if i < n_segments - 1 else T
+            if start < end - 1:
+                seg_vel = np.diff(flat[start:end], axis=0)
+                vel_segments.append(seg_vel.std(axis=0))
+            else:
+                vel_segments.append(np.zeros(flat.shape[1]))
+
+        if len(vel_segments) > 1:
+            vel_seg_var = np.std(vel_segments, axis=0)  # (144,) — changes in velocity variability
+        else:
+            vel_seg_var = np.zeros(flat.shape[1])
+        features.append(vel_seg_var)
+    else:
+        features.append(np.zeros(flat.shape[1]))
+
+    return np.concatenate([f.ravel() for f in features])
+>>>>>>> REPLACE
+</DIFF>

@@ -1,0 +1,14 @@
+{
+  "generation": 55,
+  "novelty_attempt": 1,
+  "resample_attempt": 1,
+  "patch_attempt": 1,
+  "success": true,
+  "num_applied": 1,
+  "patch_name": "enhanced_gait_classifier",
+  "patch_description": "This implementation combines the best features from both programs to improve the severe class F1 score. The key improvements are:\n\n1. Enhanced feature extraction with additional categories focused on PD-specific gait characteristics:\n   - Added jerk (3rd derivative) statistics to capture bradykinesia\n   - Added coefficient of variation (std/mean) for key joints\n   - Added trunk stability metrics from spine joints\n   - Added arm swing magnitude and asymmetry from shoulder/elbow velocities\n   - Added percentile features for more robust velocity statistics\n\n2. Improved classifier configuration:\n   - Increased class weight for severe PD (class 2) to 3.0x to address imbalance\n   - Used more conservative class weights for other classes\n   - Maintained the proven RF+GB soft-voting ensemble\n\n3. Added robustness features:\n   - Proper nan/inf handling with np.nan_to_num\n   - Better edge case handling for short sequences\n   - Maintained lazy sklearn imports\n\nThe feature engineering specifically targets the primary bottleneck (severe class F1) by incorporating clinical markers of PD severity like bradykinesia, rigidity, and postural instability.",
+  "error_msg": null,
+  "timestamp": "2026-04-06T19:23:14.895006",
+  "llm_cost": 0.002302172,
+  "llm_model": null
+}

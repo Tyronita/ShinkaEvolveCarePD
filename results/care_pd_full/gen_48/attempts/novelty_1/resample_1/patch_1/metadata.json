@@ -1,0 +1,14 @@
+{
+  "generation": 48,
+  "novelty_attempt": 1,
+  "resample_attempt": 1,
+  "patch_attempt": 1,
+  "success": true,
+  "num_applied": 1,
+  "patch_name": "add_joint_coordination_features",
+  "patch_description": "Add joint-pair coordination features capturing inter-limb coupling breakdown characteristic of PD. Compute cross-correlation between left and right hip rotations (joints 1 and 2), left and right knee rotations (joints 4 and 5), and pelvis-ankle coupling (joint 0 with joints 7 and 8) \u2014 for each pair, compute the normalized cross-correlation at lags [-5, 0, +5] frames, yielding 3 lags \u00d7 5 pairs = 15 features capturing the bilateral coordination deficit that worsens with PD severity. Additionally, compute the ratio of pelvis rotation variance to ankle rotation variance as a proxy for proximal-distal movement coupling, which clinical literature identifies as a key mild/severe discriminator. Place all new feature computation inside `extract_gait_features` before the final `np.concatenate` to maintain the proven pipeline structure.",
+  "error_msg": null,
+  "timestamp": "2026-04-06T17:56:07.073391",
+  "llm_cost": 0.002031248,
+  "llm_model": null
+}

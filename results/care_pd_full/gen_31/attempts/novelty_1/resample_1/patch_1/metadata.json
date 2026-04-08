@@ -1,0 +1,14 @@
+{
+  "generation": 31,
+  "novelty_attempt": 1,
+  "resample_attempt": 1,
+  "patch_attempt": 1,
+  "success": true,
+  "num_applied": 4,
+  "patch_name": "hybrid_features_sklearn_ensemble",
+  "patch_description": "The top-performing program (0.62 macro-F1) demonstrates that **handcrafted gait features + sklearn ensemble is superior** to MotionCLIP-only approaches (\u22640.41). The current program regressed to 0.45 by discarding this winning architecture. \n\nThis edit reverts to the proven strategy, using the full gait feature extractor from the 0.62 program and combining it with MotionCLIP if available. The classifier is switched to a voting ensemble of RandomForest and GradientBoosting, both using `StandardScaler`. This directly addresses the \"class_2_severe\" weakness by incorporating PD-specific features (asymmetry, stride frequency, regularity).\n\nKey improvements:\n- Handcrafted features are now primary, not fallback\n- MotionCLIP provides optional enhancement\n- Mean pooling replaces random attention pooling\n- sklearn handles class imbalance robustly",
+  "error_msg": null,
+  "timestamp": "2026-04-06T15:51:54.968904",
+  "llm_cost": 0.002499684,
+  "llm_model": null
+}

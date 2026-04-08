@@ -1,0 +1,244 @@
+<NAME>
+add_temporal_segmentation_features
+</NAME>
+
+<DESCRIPTION>
+Add temporal segmentation features to capture within-walk gait deterioration and freezing episodes. The current handcrafted features are computed on the entire sequence, which averages out important temporal dynamics like gait freezing or deterioration in moderate-to-severe PD. By splitting each walk into 4 non-overlapping segments and computing per-segment statistics, we can capture the variability of gait patterns within a single walk. This is particularly important for the mild/severe boundary where 58 severe cases are currently misclassified. We compute the standard deviation of per-segment means across all feature categories, adding 144 dimensions of temporal variability that directly proxy the within-walk fluctuations characteristic of moderate-to-severe PD. This change targets the primary bottleneck of severe class F1 by adding discriminative features for gait instability and freezing episodes that are invisible to whole-sequence statistics.
+</DESCRIPTION>
+
+<DIFF>
+<<<<<<< SEARCH
+def extract_gait_features(pose: np.ndarray) -> np.ndarray:
+    """
+    Extract comprehensive handcrafted gait features from SMPL pose sequence.
+    Returns a 1D feature vector capturing PD-relevant gait characteristics.
+    """
+    T = len(pose)
+    rot6d = smpl_to_6d(pose)  # (T, 25, 6)
+    flat = rot6d.reshape(T, -1)  # (T, 150)
+
+    features = []
+
+    # 1. Global rotation statistics per joint (mean, std, percentiles)
+    features.append(flat.mean(0))       # (150,)
+    features.append(flat.std(0))        # (150,)
+    features.append(np.percentile(flat, 25, axis=0))  # (150,)
+    features.append(np.percentile(flat, 75, axis=0))  # (150,)
+=======
+def extract_gait_features(pose: np.ndarray) -> np.ndarray:
+    """
+    Extract comprehensive handcrafted gait features from SMPL pose sequence.
+    Returns a 1D feature vector capturing PD-relevant gait characteristics.
+    """
+    T = len(pose)
+    rot6d = smpl_to_6d(pose)  # (T, 25, 6)
+    flat = rot6d.reshape(T, -1)  # (T, 150)
+
+    features = []
+
+    # 1. Global rotation statistics per joint (mean, std, percentiles)
+    features.append(flat.mean(0))       # (150,)
+    features.append(flat.std(0))        # (150,)
+    features.append(np.percentile(flat, 25, axis=0))  # (150,)
+    features.append(np.percentile(flat, 75, axis=0))  # (150,)
+
+    # 2. Temporal segmentation: split into 4 segments and compute variability
+    # This captures gait deterioration and freezing episodes
+    n_segments = 4
+    seg_size = T // n_segments
+    if seg_size > 0:
+        seg_means = []
+        for i in range(n_segments):
+            start_idx = i * seg_size
+            end_idx = start_idx + seg_size if i < n_segments - 1 else T
+            seg_means.append(flat[start_idx:end_idx].mean(0))
+        # Add std of segment means as temporal variability feature
+        features.append(np.std(seg_means, axis=0))  # (150,) temporal variability
+>>>>>>> REPLACE
+</DIFF>
+
+<DIFF>
+<<<<<<< SEARCH
+    # 2. Velocity (1st derivative) statistics
+    vel = np.diff(flat, axis=0)  # (T-1, 150)
+    features.append(vel.mean(0))
+    features.append(vel.std(0))
+    features.append(np.abs(vel).mean(0))  # mean absolute velocity
+
+    # 3. Acceleration (2nd derivative) statistics
+    if T > 2:
+        acc = np.diff(vel, axis=0)  # (T-2, 150)
+        features.append(acc.mean(0))
+        features.append(acc.std(0))
+        features.append(np.abs(acc).mean(0))  # jerkiness proxy
+    else:
+        features.extend([np.zeros(150)] * 3)
+=======
+    # 3. Velocity (1st derivative) statistics
+    vel = np.diff(flat, axis=0)  # (T-1, 150)
+    features.append(vel.mean(0))
+    features.append(vel.std(0))
+    features.append(np.abs(vel).mean(0))  # mean absolute velocity
+
+    # 4. Acceleration (2nd derivative) statistics
+    if T > 2:
+        acc = np.diff(vel, axis=0)  # (T-2, 150)
+        features.append(acc.mean(0))
+        features.append(acc.std(0))
+        features.append(np.abs(acc).mean(0))  # jerkiness proxy
+    else:
+        features.extend([np.zeros(150)] * 3)
+>>>>>>> REPLACE
+</DIFF>
+
+<DIFF>
+<<<<<<< SEARCH
+    # 4. Left-right asymmetry (KEY for PD — affected side shows reduced motion)
+    lr_pairs = [(1, 2), (4, 5), (7, 8), (10, 11), (16, 17), (18, 19), (20, 21)]
+    for l_idx, r_idx in lr_pairs:
+        diff = rot6d[:, l_idx, :] - rot6d[:, r_idx, :]  # (T, 6)
+        features.append(diff.mean(0))   # (6,) mean asymmetry
+        features.append(diff.std(0))    # (6,) variability of asymmetry
+        features.append(np.abs(diff).mean(0))  # (6,) magnitude
+=======
+    # 5. Left-right asymmetry (KEY for PD — affected side shows reduced motion)
+    lr_pairs = [(1, 2), (4, 5), (7, 8), (10, 11), (16, 17), (18, 19), (20, 21)]
+    for l_idx, r_idx in lr_pairs:
+        diff = rot6d[:, l_idx, :] - rot6d[:, r_idx, :]  # (T, 6)
+        features.append(diff.mean(0))   # (6,) mean asymmetry
+        features.append(diff.std(0))    # (6,) variability of asymmetry
+        features.append(np.abs(diff).mean(0))  # (6,) magnitude
+>>>>>>> REPLACE
+</DIFF>
+
+<DIFF>
+<<<<<<< SEARCH
+    # 5. Joint range of motion (ROM) — reduced in PD
+    for j in [0, 1, 2, 4, 5, 7, 8, 12, 16, 17, 18, 19]:
+        joint_data = rot6d[:, j, :]
+        rom = joint_data.max(0) - joint_data.min(0)  # (6,)
+        features.append(rom)
+=======
+    # 6. Joint range of motion (ROM) — reduced in PD
+    for j in [0, 1, 2, 4, 5, 7, 8, 12, 16, 17, 18, 19]:
+        joint_data = rot6d[:, j, :]
+        rom = joint_data.max(0) - joint_data.min(0)  # (6,)
+        features.append(rom)
+>>>>>>> REPLACE
+</DIFF>
+
+<DIFF>
+<<<<<<< SEARCH
+    # 6. Stride frequency via FFT on lower body joints
+    for j in [0, 1, 2, 7, 8]:  # pelvis, hips, ankles
+        for comp in range(min(3, 6)):  # first 3 components
+            signal = rot6d[:, j, comp]
+            signal = signal - signal.mean()
+            if T > 10:
+                fft_mag = np.abs(np.fft.rfft(signal))
+                freqs = np.fft.rfftfreq(T, d=1.0/30)
+                gait_mask = (freqs >= 0.5) & (freqs <= 3.0)
+                if gait_mask.any():
+                    gait_fft = fft_mag[gait_mask]
+                    gait_freqs = freqs[gait_mask]
+                    dom_freq = gait_freqs[np.argmax(gait_fft)]
+                    dom_power = gait_fft.max()
+                    total_power = fft_mag[1:].sum() + 1e-8
+                    gait_power_ratio = gait_fft.sum() / total_power
+                    features.append(np.array([dom_freq, dom_power, gait_power_ratio]))
+                else:
+                    features.append(np.zeros(3))
+            else:
+                features.append(np.zeros(3))
+=======
+    # 7. Stride frequency via FFT on lower body joints
+    for j in [0, 1, 2, 7, 8]:  # pelvis, hips, ankles
+        for comp in range(min(3, 6)):  # first 3 components
+            signal = rot6d[:, j, comp]
+            signal = signal - signal.mean()
+            if T > 10:
+                fft_mag = np.abs(np.fft.rfft(signal))
+                freqs = np.fft.rfftfreq(T, d=1.0/30)
+                gait_mask = (freqs >= 0.5) & (freqs <= 3.0)
+                if gait_mask.any():
+                    gait_fft = fft_mag[gait_mask]
+                    gait_freqs = freqs[gait_mask]
+                    dom_freq = gait_freqs[np.argmax(gait_fft)]
+                    dom_power = gait_fft.max()
+                    total_power = fft_mag[1:].sum() + 1e-8
+                    gait_power_ratio = gait_fft.sum() / total_power
+                    features.append(np.array([dom_freq, dom_power, gait_power_ratio]))
+                else:
+                    features.append(np.zeros(3))
+            else:
+                features.append(np.zeros(3))
+>>>>>>> REPLACE
+</DIFF>
+
+<DIFF>
+<<<<<<< SEARCH
+    # 7. Gait regularity via autocorrelation of pelvis
+    pelvis_signal = rot6d[:, 0, 0]
+    pelvis_signal = pelvis_signal - pelvis_signal.mean()
+    if T > 30:
+        ac = np.correlate(pelvis_signal, pelvis_signal, mode='full')
+        ac = ac[T-1:] / (ac[T-1] + 1e-8)
+        n_lags = min(60, len(ac))
+        features.append(ac[:n_lags])
+        if n_lags < 60:
+            features.append(np.zeros(60 - n_lags))
+    else:
+        features.append(np.zeros(60))
+=======
+    # 8. Gait regularity via autocorrelation of pelvis
+    pelvis_signal = rot6d[:, 0, 0]
+    pelvis_signal = pelvis_signal - pelvis_signal.mean()
+    if T > 30:
+        ac = np.correlate(pelvis_signal, pelvis_signal, mode='full')
+        ac = ac[T-1:] / (ac[T-1] + 1e-8)
+        n_lags = min(60, len(ac))
+        features.append(ac[:n_lags])
+        if n_lags < 60:
+            features.append(np.zeros(60 - n_lags))
+    else:
+        features.append(np.zeros(60))
+>>>>>>> REPLACE
+</DIFF>
+
+<DIFF>
+<<<<<<< SEARCH
+    # 8. Freeze-of-gait proxy: high-freq power ratio for ankles
+    for j in [7, 8]:
+        signal = rot6d[:, j, 0] - rot6d[:, j, 0].mean()
+        if T > 10:
+            fft_mag = np.abs(np.fft.rfft(signal))
+            freqs = np.fft.rfftfreq(T, d=1.0/30)
+            hf = fft_mag[freqs > 3.0].sum()
+            lf = fft_mag[(freqs >= 0.5) & (freqs <= 3.0)].sum() + 1e-8
+            features.append(np.array([hf / lf]))
+        else:
+            features.append(np.zeros(1))
+
+    # 9. Sequence length (normalized) — PD patients may have shorter walks
+    features.append(np.array([T / 30.0, np.log1p(T)]))
+
+    return np.concatenate([f.ravel() for f in features])
+=======
+    # 9. Freeze-of-gait proxy: high-freq power ratio for ankles
+    for j in [7, 8]:
+        signal = rot6d[:, j, 0] - rot6d[:, j, 0].mean()
+        if T > 10:
+            fft_mag = np.abs(np.fft.rfft(signal))
+            freqs = np.fft.rfftfreq(T, d=1.0/30)
+            hf = fft_mag[freqs > 3.0].sum()
+            lf = fft_mag[(freqs >= 0.5) & (freqs <= 3.0)].sum() + 1e-8
+            features.append(np.array([hf / lf]))
+        else:
+            features.append(np.zeros(1))
+
+    # 10. Sequence length (normalized) — PD patients may have shorter walks
+    features.append(np.array([T / 30.0, np.log1p(T)]))
+
+    return np.concatenate([f.ravel() for f in features])
+>>>>>>> REPLACE
+</DIFF>

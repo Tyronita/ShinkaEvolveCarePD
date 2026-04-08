@@ -1,0 +1,14 @@
+{
+  "generation": 83,
+  "novelty_attempt": 1,
+  "resample_attempt": 1,
+  "patch_attempt": 1,
+  "success": true,
+  "num_applied": 1,
+  "patch_name": "add_bilateral_cross_correlation_features",
+  "patch_description": "Bilateral coordination breakdown is a hallmark of severe Parkinson's disease, especially in gait. While the current model includes L-R asymmetry features (mean/std of joint rotation differences), it lacks explicit modeling of temporal coordination between limbs. \n\nThe proposed change adds bilateral cross-correlation features between homologous joints (hips, knees, ankles) at three temporal lags (-5, 0, +5 frames), capturing both in-phase and anti-phase coordination patterns. These 54 features (3 joint pairs \u00d7 3 lags \u00d7 6 rotation components) directly target the temporal asymmetry that characterizes severe PD gait. \n\nAdditionally, we add 6 features measuring the ratio of pelvis-to-ankle rotation variance across all 6 rotation components, serving as a proximal-distal coupling proxy. Severe PD patients exhibit reduced trunk-ankle coordination, making this ratio discriminative.\n\nThese features specifically address the severe class under-prediction (currently 0.44 F1) by providing direct measures of inter-limb coordination breakdown, which is more pronounced in severe PD than in mild cases.",
+  "error_msg": null,
+  "timestamp": "2026-04-06T23:30:20.875339",
+  "llm_cost": 0.00340209,
+  "llm_model": null
+}

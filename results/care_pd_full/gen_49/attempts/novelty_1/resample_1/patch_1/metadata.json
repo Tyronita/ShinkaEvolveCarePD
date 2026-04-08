@@ -1,0 +1,14 @@
+{
+  "generation": 49,
+  "novelty_attempt": 1,
+  "resample_attempt": 1,
+  "patch_attempt": 1,
+  "success": true,
+  "num_applied": 1,
+  "patch_name": "hybrid_feature_ensemble_v2",
+  "patch_description": "This solution combines the best elements from the high-performing handcrafted feature approach (macro-F1 0.63) with enhanced feature engineering and a more robust ensemble strategy. Key improvements:\n\n1. Feature Engineering: Expanded the feature set with new discriminative features targeting the severe PD class:\n   - Added jerk features (3rd derivative) to capture movement smoothness degradation\n   - Included coefficient of variation for joint velocities\n   - Added trunk stability metrics from spine joints\n   - Enhanced arm swing analysis with magnitude and asymmetry\n   - Added percentile features and zero-crossing rates\n\n2. Ensemble Architecture: Created a weighted soft-voting ensemble with:\n   - RandomForest with inverse-frequency class weights\n   - GradientBoosting with sample weights and optimized hyperparameters\n   - SVM with balanced class weights for boundary refinement\n\n3. Robustness: Maintained all critical safeguards:\n   - Lazy sklearn imports\n   - Try/except wrappers for MotionCLIP operations\n   - NaN/inf handling with np.nan_to_num\n   - Proper feature cleaning before classification\n\n4. Performance Focus: Specifically targeted the severe class bottleneck (F1=0.48\u21920.53) through feature engineering and weighted ensemble voting that emphasizes severe class discrimination.\n\nThe architecture follows the proven winning recipe of handcrafted features + sklearn ensemble while adding more discriminative power for the challenging mild/severe boundary.",
+  "error_msg": null,
+  "timestamp": "2026-04-06T18:03:16.735170",
+  "llm_cost": 0.01213572,
+  "llm_model": null
+}

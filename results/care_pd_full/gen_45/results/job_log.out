@@ -1,0 +1,67 @@
+========================================================================
+[evaluate] genome:      gen_45
+[evaluate] program:     /workspace/ShinkaEvolveCarePD/results/care_pd_full/gen_45/main.py
+[evaluate] results_dir: /workspace/ShinkaEvolveCarePD/results/care_pd_full/gen_45/results
+[evaluate] care_pd_dir: /workspace/CARE-PD
+[evaluate] gpu:         CUDA  device=NVIDIA RTX A5000  vram=25.3GB  gpus=1
+========================================================================
+[evaluate] Loading dataset from /workspace/CARE-PD/assets/datasets/BMCLab.pkl ...
+[evaluate] Dataset loaded in 0.40s
+[evaluate] subjects=23  walks=781  label_dist={0:341, 1:276, 2:164}  folds=6
+[evaluate] Pretrained checkpoints available:
+  mixste: best_epoch_cpn_81f.bin (404.7MB)
+  momask: opt.txt (0.0MB), .DS_Store (0.0MB), net_best_fid.tar (84.1MB)
+  motionagformer: motionagformer-s-h36m.pth.tr (59.8MB)
+  motionbert: motionbert.bin (170.0MB)
+  motionbertlite: latest_epoch.bin (64.1MB)
+  motionclip: motionclip_encoder_checkpoint_0100.pth.tar (77.9MB), .DS_Store (0.0MB)
+  poseformerv2: 27_243_45.2.bin (172.8MB), 9_81_46.0.bin (172.5MB), .DS_Store (0.0MB)
+  potr: pre-trained_NTU_ckpt_epoch_199_enc_80_dec_20.pt (26.5MB)
+========================================================================
+[evaluate] Importing genome ...
+[evaluate] Import OK (11.40s)
+[evaluate] Running run_evaluation() ...
+[genome] checkpoint: 2/101 layers loaded from motionclip_encoder_checkpoint_0100.pth.tar
+[genome] Path A: Hybrid features (MotionCLIP + gait) → sklearn ensemble (device=cuda)
+  fold 1: macro_f1=0.4729  f1=[normal:0.435, mild:0.719, severe:0.265]
+[genome] checkpoint: 2/101 layers loaded from motionclip_encoder_checkpoint_0100.pth.tar
+[genome] Path A: Hybrid features (MotionCLIP + gait) → sklearn ensemble (device=cuda)
+  fold 2: macro_f1=0.4460  f1=[normal:0.796, mild:0.043, severe:0.500]
+[genome] checkpoint: 2/101 layers loaded from motionclip_encoder_checkpoint_0100.pth.tar
+[genome] Path A: Hybrid features (MotionCLIP + gait) → sklearn ensemble (device=cuda)
+  fold 3: macro_f1=0.5575  f1=[normal:0.884, mild:0.788, severe:0.000]
+[genome] checkpoint: 2/101 layers loaded from motionclip_encoder_checkpoint_0100.pth.tar
+[genome] Path A: Hybrid features (MotionCLIP + gait) → sklearn ensemble (device=cuda)
+  fold 4: macro_f1=0.6298  f1=[normal:0.807, mild:0.554, severe:0.528]
+[genome] checkpoint: 2/101 layers loaded from motionclip_encoder_checkpoint_0100.pth.tar
+[genome] Path A: Hybrid features (MotionCLIP + gait) → sklearn ensemble (device=cuda)
+  fold 5: macro_f1=0.4504  f1=[normal:0.775, mild:0.577, severe:0.000]
+[genome] checkpoint: 2/101 layers loaded from motionclip_encoder_checkpoint_0100.pth.tar
+[genome] Path A: Hybrid features (MotionCLIP + gait) → sklearn ensemble (device=cuda)
+  fold 6: macro_f1=0.4794  f1=[normal:0.697, mild:0.000, severe:0.742]
+
+[result] macro_f1=0.5967  f1_class=[normal:0.7574, mild:0.5617, severe:0.4710]  device=cuda
+========================================================================
+[evaluate] RESULTS — gen_45
+  macro_f1        : 0.5967   (baseline 0.5650, LOSO SOTA 0.68)
+  f1_class0_normal: 0.7574   (n=341 walks)
+  f1_class1_mild  : 0.5617   (n=276 walks)
+  f1_class2_severe: 0.471   (n=164 walks)  ← clinically most important
+  n_walks_total   : 781
+  eval_time       : 880.2s
+  confusion_matrix:
+    pred→  [0]   [1]   [2]
+    true[0] normal: [281, 53, 7]
+    true[1] mild  : [75, 148, 53]
+    true[2] severe: [45, 50, 69]
+  per_fold_f1:
+    fold 1: 0.4729  (test=159, train=622)
+    fold 2: 0.4460  (test=122, train=659)
+    fold 3: 0.5575  (test=143, train=638)
+    fold 4: 0.6298  (test=115, train=666)
+    fold 5: 0.4504  (test=135, train=646)
+    fold 6: 0.4794  (test=107, train=674)
+  pred_dist  : {0: 401, 1: 251, 2: 129}
+  label_dist : {0: 341, 1: 276, 2: 164}
+========================================================================
+[evaluate] Leaderboard updated: /workspace/ShinkaEvolveCarePD/care_pd_task/leaderboard.csv

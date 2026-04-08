@@ -1,0 +1,70 @@
+<NAME>
+add_bilateral_coordination_features
+</NAME>
+
+<DESCRIPTION>
+The current feature set lacks explicit measures of bilateral coordination breakdown, a key clinical sign in PD gait that worsens with severity. I propose adding cross-correlation features between left/right joint rotation signals across key gait joints (hips, knees, ankles, pelvis-ankle coupling) at multiple lags. Additionally, the ratio of pelvis-to-ankle rotation variance is added as a proximal-distal coupling proxy. These features capture the deterioration of coordinated movement patterns in severe PD, providing discriminative signal for class 2. The 96 new features are appended to the existing handcrafted feature vector within extract_gait_features, following the proven architecture of handcrafted features → soft-voting ensemble.
+</DESCRIPTION>
+
+<DIFF>
+<<<<<<< SEARCH
+    # 8. Freeze-of-gait proxy: high-freq power ratio for ankles
+    for j in [7, 8]:
+        signal = rot6d[:, j, 0] - rot6d[:, j, 0].mean()
+        if T > 10:
+            fft_mag = np.abs(np.fft.rfft(signal))
+            freqs = np.fft.rfftfreq(T, d=1.0/30)
+            hf = fft_mag[freqs > 3.0].sum()
+            lf = fft_mag[(freqs >= 0.5) & (freqs <= 3.0)].sum() + 1e-8
+            features.append(np.array([hf / lf]))
+        else:
+            features.append(np.zeros(1))
+
+    # 9. Sequence length (normalized) — PD patients may have shorter walks
+    features.append(np.array([T / 30.0, np.log1p(T)]))
+=======
+    # 8. Freeze-of-gait proxy: high-freq power ratio for ankles
+    for j in [7, 8]:
+        signal = rot6d[:, j, 0] - rot6d[:, j, 0].mean()
+        if T > 10:
+            fft_mag = np.abs(np.fft.rfft(signal))
+            freqs = np.fft.rfftfreq(T, d=1.0/30)
+            hf = fft_mag[freqs > 3.0].sum()
+            lf = fft_mag[(freqs >= 0.5) & (freqs <= 3.0)].sum() + 1e-8
+            features.append(np.array([hf / lf]))
+        else:
+            features.append(np.zeros(1))
+
+    # 9. Bilateral coordination breakdown features (KEY for severe PD)
+    # Compute normalized cross-correlation at lags [-5, 0, 5] for key joint pairs
+    lag_vals = [-5, 0, 5]
+    joint_pairs = [(1,2), (4,5), (7,8)]  # hips, knees, ankles
+    pelvis_ankle_pairs = [(0,7), (0,8)]  # pelvis-L_ankle, pelvis-R_ankle
+    for pair in joint_pairs + pelvis_ankle_pairs:
+        for comp in range(6):  # all 6 rotation components
+            s1 = rot6d[:, pair[0], comp]
+            s2 = rot6d[:, pair[1], comp]
+            s1 = (s1 - s1.mean()) / (s1.std() + 1e-8)
+            s2 = (s2 - s2.mean()) / (s2.std() + 1e-8)
+            for lag in lag_vals:
+                if lag == 0:
+                    cc = np.corrcoef(s1, s2)[0,1]
+                else:
+                    if lag > 0:
+                        cc = np.corrcoef(s1[lag:], s2[:-lag])[0,1] if lag < T else 0.0
+                    else:
+                        cc = np.corrcoef(s1[:lag], s2[-lag:])[0,1] if -lag < T else 0.0
+                features.append(np.array([cc]))
+
+    # 10. Proximal-distal coupling: pelvis vs ankle rotation variance ratio (6-dim)
+    for comp in range(6):
+        pelvis_var = np.var(rot6d[:, 0, comp])
+        ankle_var = (np.var(rot6d[:, 7, comp]) + np.var(rot6d[:, 8, comp])) / 2.0
+        ratio = pelvis_var / (ankle_var + 1e-8)
+        features.append(np.array([ratio]))
+
+    # 11. Sequence length (normalized) — PD patients may have shorter walks
+    features.append(np.array([T / 30.0, np.log1p(T)]))
+>>>>>>> REPLACE
+
+</DIFF>

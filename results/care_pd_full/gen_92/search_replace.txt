@@ -1,0 +1,77 @@
+<NAME>
+calibrate_gradient_boosting
+</NAME>
+
+<DESCRIPTION>
+The current ensemble uses GradientBoostingClassifier directly in a soft-voting scheme, but its predicted probabilities are often miscalibrated, especially for the minority severe class (UPDRS=2). This causes the soft voter to underweight GB's predictions for severe cases, biasing the ensemble toward normal/mild predictions. By wrapping both ensemble members in CalibratedClassifierCV with isotonic regression, we ensure both RF and GB contribute well-calibrated class probabilities before soft averaging. This is particularly critical for class 2, where even small improvements in calibration can reduce misclassification as mild or normal. The change mirrors the successful calibration of RF and applies it uniformly to both base estimators.
+</DESCRIPTION>
+
+<DIFF>
+<<<<<<< SEARCH
+    # Random Forest pipeline
+    rf = Pipeline([
+        ('scaler', StandardScaler()),
+        ('clf', RandomForestClassifier(
+            n_estimators=300,
+            max_depth=None,
+            min_samples_leaf=2,
+            class_weight=class_weights,
+            random_state=42,
+            n_jobs=-1
+        ))
+    ])
+
+    # Gradient Boosting pipeline
+    gb = Pipeline([
+        ('scaler', StandardScaler()),
+        ('clf', GradientBoostingClassifier(
+            n_estimators=200,
+            max_depth=4,
+            learning_rate=0.05,
+            subsample=0.8,
+            random_state=42
+        ))
+    ])
+
+    # Soft voting ensemble
+    ensemble = VotingClassifier(
+        estimators=[('rf', rf), ('gb', gb)],
+        voting='soft'
+    )
+=======
+    from sklearn.calibration import CalibratedClassifierCV
+
+    # Random Forest pipeline with calibration
+    rf_base = Pipeline([
+        ('scaler', StandardScaler()),
+        ('clf', RandomForestClassifier(
+            n_estimators=300,
+            max_depth=None,
+            min_samples_leaf=2,
+            class_weight=class_weights,
+            random_state=42,
+            n_jobs=-1
+        ))
+    ])
+    rf = CalibratedClassifierCV(rf_base, method='isotonic', cv=3)
+
+    # Gradient Boosting pipeline with calibration
+    gb_base = Pipeline([
+        ('scaler', StandardScaler()),
+        ('clf', GradientBoostingClassifier(
+            n_estimators=200,
+            max_depth=4,
+            learning_rate=0.05,
+            subsample=0.8,
+            random_state=42
+        ))
+    ])
+    gb = CalibratedClassifierCV(gb_base, method='isotonic', cv=3)
+
+    # Soft voting ensemble
+    ensemble = VotingClassifier(
+        estimators=[('rf', rf), ('gb', gb)],
+        voting='soft'
+    )
+>>>>>>> REPLACE
+</DIFF>

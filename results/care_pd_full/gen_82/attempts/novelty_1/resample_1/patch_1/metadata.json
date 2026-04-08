@@ -1,0 +1,14 @@
+{
+  "generation": 82,
+  "novelty_attempt": 1,
+  "resample_attempt": 1,
+  "patch_attempt": 1,
+  "success": true,
+  "num_applied": 1,
+  "patch_name": "calibrated_rf_gb_ensemble_v3",
+  "patch_description": "The current best program (score=0.6551) achieves a significant boost by applying isotonic calibration to the Random Forest classifier within a soft-voting ensemble. This calibration corrects the RF's poorly calibrated probabilities, especially for the minority severe class, allowing the ensemble to assign higher and more accurate probabilities to severe PD cases.\n\nThe current program under test (score=0.60) uses the same RF+GB ensemble structure but lacks this critical calibration step. It also uses suboptimal hyperparameters (n_estimators=300, min_samples_leaf=2) compared to the proven best (n_estimators=500, min_samples_leaf=1).\n\nI propose to upgrade the `train_sklearn_ensemble` function to match the current best architecture exactly:\n1. Import `CalibratedClassifierCV` and wrap the RF pipeline with it using `method='isotonic'` and `cv=3`.\n2. Update the RF hyperparameters to `n_estimators=500` and `min_samples_leaf=1` to produce better base probabilities for calibration.\n3. Keep the GB pipeline unchanged as its probabilities are already well-calibrated.\n\nThis change directly addresses the primary bottleneck of severe class under-prediction by improving probability calibration, which is the single most impactful improvement observed in the program history (0.6356 \u2192 0.6551). The change is minimal and targets only the classifier training function, preserving the proven feature extraction pipeline.",
+  "error_msg": null,
+  "timestamp": "2026-04-06T23:24:44.978986",
+  "llm_cost": 0.0038541,
+  "llm_model": null
+}

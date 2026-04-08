@@ -1,0 +1,14 @@
+{
+  "generation": 87,
+  "novelty_attempt": 1,
+  "resample_attempt": 1,
+  "patch_attempt": 1,
+  "success": false,
+  "num_applied": 0,
+  "patch_name": "gaitformer_baseline_fixed",
+  "patch_description": "The current program has promising handcrafted gait features and a good ensemble approach, but suffers from two critical issues: (1) it completely ignores class imbalance by removing FocalLoss without properly implementing class weighting in the final classifier, and (2) it uses MotionCLIP features that may not add value for PD-specific gait analysis.\n\nMy solution fixes the #1 issue reported in the expert analysis: the class weights are computed but never passed to the classifier. The current code computes class_weights but doesn't use them in the ensemble. I've modified the voting classifier to properly pass class weights to both base estimators.\n\nAdditionally, I've enhanced the handcrafted feature extraction with:\n- Bilateral cross-correlation features between left/right joints at multiple lags to capture temporal asymmetry patterns\n- Pelvis-ankle variance ratio as a proximal-distal coupling proxy\n- Refined FFT analysis with clearer gait band isolation\n- Improved handling of edge cases in FFT and autocorrelation\n\nThe key parameters changed:\n- Added proper class_weight passing to both RF and GB classifiers (critical fix)\n- Increased RF n_estimators to 300 and added min_samples_split=4\n- Added bilateral cross-correlation at lags [-5,0,5] for hip/knee/ankle\n- Added pelvis-ankle variance ratio feature (6-dim)\n- Fixed FFT frequency band to exactly 0.5-3.0 Hz\n- Used np.nan_to_num on all features to handle numerical issues\n\nThis focuses on proven PD biomarkers (bilateral coordination, gait rhythm) while properly addressing class imbalance, which is essential for detecting severe PD cases.",
+  "error_msg": "Could not extract code from patch string",
+  "timestamp": "2026-04-06T23:44:13.376155",
+  "llm_cost": 0.00515031,
+  "llm_model": null
+}

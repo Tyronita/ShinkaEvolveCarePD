@@ -1,0 +1,51 @@
+<NAME>
+velocity_temporal_segments
+</NAME>
+
+<DESCRIPTION>
+Add temporal segmentation of velocity features to capture gait deterioration within walks, which is a key marker of severe PD. The current whole-sequence statistics average out important temporal dynamics. By splitting the velocity sequence into 4 quarters and computing per-segment means, then adding the std across segments (144-dim) and linear trend slope (144-dim), we capture both variability and progression of movement impairment. This specifically targets the 56 severe cases misclassified as mild by detecting fatigue-induced gait degradation. Unlike prior attempts that segmented raw rotations, velocity is the clinically meaningful signal for PD progression.
+</DESCRIPTION>
+
+<DIFF>
+<<<<<<< SEARCH
+    # 2. Velocity statistics (first derivative)
+    if T > 1:
+        vel = np.diff(flat, axis=0)  # (T-1, 144)
+        features.append(vel.mean(0))     # (144,)
+        features.append(vel.std(0))      # (144,)
+        features.append(np.abs(vel).mean(0))  # mean absolute velocity
+    else:
+        features.extend([np.zeros(144)] * 3)
+=======
+    # 2. Velocity statistics (first derivative)
+    if T > 1:
+        vel = np.diff(flat, axis=0)  # (T-1, 144)
+        features.append(vel.mean(0))     # (144,)
+        features.append(vel.std(0))      # (144,)
+        features.append(np.abs(vel).mean(0))  # mean absolute velocity
+        
+        # Temporal segmentation to capture gait deterioration
+        n_segments = 4
+        seg_len = len(vel) // n_segments
+        if seg_len > 0:
+            segment_means = []
+            for i in range(n_segments):
+                start_idx = i * seg_len
+                end_idx = start_idx + seg_len if i < n_segments - 1 else len(vel)
+                segment_mean = vel[start_idx:end_idx].mean(axis=0)
+                segment_means.append(segment_mean)
+            segment_means = np.array(segment_means)
+            # Std across segments - captures variability in velocity patterns
+            features.append(segment_means.std(axis=0))
+            # Linear trend across segments - captures deterioration/progression
+            if n_segments > 1:
+                trend = np.polyfit(range(n_segments), segment_means, 1)[0]
+                features.append(trend)
+            else:
+                features.append(np.zeros(144))
+        else:
+            features.extend([np.zeros(144)] * 2)
+    else:
+        features.extend([np.zeros(144)] * 5)
+>>>>>>> REPLACE
+</DIFF>

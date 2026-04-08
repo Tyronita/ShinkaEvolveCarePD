@@ -1,0 +1,14 @@
+{
+  "generation": 50,
+  "novelty_attempt": 1,
+  "resample_attempt": 1,
+  "patch_attempt": 1,
+  "success": true,
+  "num_applied": 1,
+  "patch_name": "tune_class_weights_and_rf_params",
+  "patch_description": "The current confusion matrix shows 40 severe\u2192normal and 58 severe\u2192mild misclassifications \u2014 the primary bottleneck is poor recall for class 2 (severe PD), which has the lowest F1 (0.47). The current class weighting `{i: counts.sum() / (n_cls * counts[i])}` gives class 2 a weight of ~1.58\u00d7, but this is insufficient.\n\nWe address this by:\n1. Increasing the class 2 weight by 1.5\u00d7 multiplicative factor to prioritize severe case detection.\n2. Tuning RandomForest to reduce over-smoothing: `min_samples_leaf=1` preserves fine-grained gait patterns in severe gait freezing, and `max_features='sqrt'` increases ensemble diversity.\n3. Boosting GB capacity: more estimators (300), lower learning rate (0.03), shallower trees (max_depth=3) prevent early overfitting.\n\nThese changes maintain the proven handcrafted + ensemble architecture while focusing model attention on the most clinically critical and hardest-to-predict class. This strategy directly targets the observed misclassification pattern.",
+  "error_msg": null,
+  "timestamp": "2026-04-06T18:09:33.897360",
+  "llm_cost": 0.00138309,
+  "llm_model": null
+}

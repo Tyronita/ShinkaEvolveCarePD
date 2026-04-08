@@ -1,0 +1,689 @@
+
+
+<NAME>
+multiwindow_motionclip_with_handcrafted_gait_features
+</NAME>
+
+<DESCRIPTION>
+Key insights from analyzing the baseline:
+1. Class 2 (severe PD) gets F1=0.00 - the model never predicts it. This is the biggest issue.
+2. Single center-crop of 60 frames loses temporal information about gait variability.
+3. The MLP classifier with FocalLoss isn't handling the class imbalance well enough.
+
+Novel approach:
+1. Multi-window MotionCLIP features: Slide multiple 60-frame windows across each walk, extract 512-dim embeddings per window, then compute mean, std, min, max statistics across windows. This captures gait variability and consistency - key PD indicators.
+2. Handcrafted gait features: Extract physics-informed features including joint angular velocities, left-right asymmetry (critical PD marker), stride regularity via autocorrelation, and frequency-domain features from hip/knee joints.
+3. Combined feature vector fed to a gradient-boosted ensemble (XGBoost-style via sklearn) with strong class weighting, plus an MLP ensemble with aggressive oversampling of class 2.
+4. Explicit class-weight balancing with sqrt-inverse-frequency weighting and SMOTE-like oversampling of minority class during training.
+5. Temperature-scaled predictions with a bias toward class 2 to fix the zero-prediction problem.
+</DESCRIPTION>
+
+<CODE>
+```python
+"""
+CARE-PD: UPDRS Gait Score Prediction from SMPL Pose Sequences
+Multi-window MotionCLIP + handcrafted gait features + ensemble classifier.
+"""
+
+import collections
+import os
+import numpy as np
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from sklearn.metrics import f1_score
+from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
+from sklearn.preprocessing import StandardScaler
+
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
+# ===========================================================================
+# EVOLVE-BLOCK-START
+# ===========================================================================
+
+# ── Rotation utilities ──────────────────────────────────────────────────────
+
+def _aa_to_quat(aa: torch.Tensor) -> torch.Tensor:
+    angles = torch.norm(aa, p=2, dim=-1, keepdim=True).clamp(min=1e-8)
+    half = 0.5 * angles
+    small = angles.abs() < 1e-6
+    s = torch.where(small, 0.5 - angles * angles / 48, torch.sin(half) / angles)
+    return torch.cat([torch.cos(half), aa * s], dim=-1)
+
+
+def _quat_to_mat(q: torch.Tensor) -> torch.Tensor:
+    r, i, j, k = torch.unbind(q, -1)
+    s = 2.0 / (q * q).sum(-1)
+    o = torch.stack([
+        1 - s*(j*j + k*k), s*(i*j - k*r), s*(i*k + j*r),
+        s*(i*j + k*r), 1 - s*(i*i + k*k), s*(j*k - i*r),
+        s*(i*k - j*r), s*(j*k + i*r), 1 - s*(i*i + j*j),
+    ], dim=-1)
+    return o.reshape(q.shape[:-1] + (3, 3))
+
+
+def _mat_to_6d(mat: torch.Tensor) -> torch.Tensor:
+    return mat[..., :2, :].clone().reshape(*mat.shape[:-2], 6)
+
+
+def smpl_to_6d(pose: np.ndarray) -> np.ndarray:
+    T = len(pose)
+    aa = torch.from_numpy(pose.reshape(T, 24, 3)).float()
+    r6 = _mat_to_6d(_quat_to_mat(_aa_to_quat(aa))).numpy()
+    return np.concatenate([r6, np.zeros((T, 1, 6), np.float32)], 1)
+
+
+def crop_pad_frames(seq: np.ndarray, n: int = 60) -> np.ndarray:
+    T = len(seq)
+    if T >= n:
+        s = (T - n) // 2
+        return seq[s:s + n]
+    reps = (n + T - 1) // T
+    return np.tile(seq, (reps,) + (1,) * (seq.ndim - 1))[:n]
+
+
+# ── Handcrafted gait features ───────────────────────────────────────────────
+
+# SMPL joint indices
+JOINT_PELVIS = 0
+JOINT_L_HIP, JOINT_R_HIP = 1, 2
+JOINT_L_KNEE, JOINT_R_KNEE = 4, 5
+JOINT_L_ANKLE, JOINT_R_ANKLE = 7, 8
+JOINT_L_FOOT, JOINT_R_FOOT = 10, 11
+JOINT_L_SHOULDER, JOINT_R_SHOULDER = 16, 17
+JOINT_L_ELBOW, JOINT_R_ELBOW = 18, 19
+JOINT_L_WRIST, JOINT_R_WRIST = 20, 21
+
+# Paired joints for asymmetry
+PAIRED_JOINTS = [
+    (JOINT_L_HIP, JOINT_R_HIP),
+    (JOINT_L_KNEE, JOINT_R_KNEE),
+    (JOINT_L_ANKLE, JOINT_R_ANKLE),
+    (JOINT_L_FOOT, JOINT_R_FOOT),
+    (JOINT_L_SHOULDER, JOINT_R_SHOULDER),
+    (JOINT_L_ELBOW, JOINT_R_ELBOW),
+    (JOINT_L_WRIST, JOINT_R_WRIST),
+]
+
+# Key gait joints
+GAIT_JOINTS = [JOINT_PELVIS, JOINT_L_HIP, JOINT_R_HIP, JOINT_L_KNEE, JOINT_R_KNEE,
+               JOINT_L_ANKLE, JOINT_R_ANKLE, JOINT_L_FOOT, JOINT_R_FOOT]
+
+
+def extract_handcrafted_features(pose: np.ndarray) -> np.ndarray:
+    """Extract physics-informed gait features from SMPL axis-angle pose (T, 72)."""
+    T = len(pose)
+    pose_reshaped = pose.reshape(T, 24, 3)  # (T, 24, 3) axis-angle per joint
+    
+    features = []
+    
+    # 1. Joint angular magnitudes (rotation amount per joint)
+    joint_angles = np.linalg.norm(pose_reshaped, axis=-1)  # (T, 24)
+    
+    # Statistics of joint angles for gait joints
+    for j in GAIT_JOINTS:
+        ja = joint_angles[:, j]
+        features.extend([np.mean(ja), np.std(ja), np.median(ja),
+                        np.percentile(ja, 25), np.percentile(ja, 75)])
+    
+    # 2. Angular velocity (first derivative)
+    if T > 1:
+        ang_vel = np.diff(pose_reshaped, axis=0)  # (T-1, 24, 3)
+        ang_vel_mag = np.linalg.norm(ang_vel, axis=-1)  # (T-1, 24)
+        
+        for j in GAIT_JOINTS:
+            av = ang_vel_mag[:, j]
+            features.extend([np.mean(av), np.std(av), np.max(av),
+                            np.percentile(av, 90)])
+        
+        # 3. Angular acceleration (second derivative)
+        if T > 2:
+            ang_acc = np.diff(ang_vel, axis=0)  # (T-2, 24, 3)
+            ang_acc_mag = np.linalg.norm(ang_acc, axis=-1)  # (T-2, 24)
+            
+            for j in GAIT_JOINTS:
+                aa = ang_acc_mag[:, j]
+                features.extend([np.mean(aa), np.std(aa), np.max(aa)])
+        else:
+            features.extend([0.0] * (len(GAIT_JOINTS) * 3))
+    else:
+        features.extend([0.0] * (len(GAIT_JOINTS) * 4))
+        features.extend([0.0] * (len(GAIT_JOINTS) * 3))
+    
+    # 4. Left-right asymmetry features (critical PD marker)
+    for lj, rj in PAIRED_JOINTS:
+        l_angles = joint_angles[:, lj]
+        r_angles = joint_angles[:, rj]
+        
+        # Asymmetry in rotation magnitude
+        diff = np.abs(l_angles - r_angles)
+        features.extend([np.mean(diff), np.std(diff), np.max(diff)])
+        
+        # Correlation between left and right
+        if np.std(l_angles) > 1e-8 and np.std(r_angles) > 1e-8:
+            corr = np.corrcoef(l_angles, r_angles)[0, 1]
+            features.append(corr if not np.isnan(corr) else 0.0)
+        else:
+            features.append(0.0)
+        
+        # Phase difference via cross-correlation
+        if T > 10:
+            l_centered = l_angles - np.mean(l_angles)
+            r_centered = r_angles - np.mean(r_angles)
+            xcorr = np.correlate(l_centered, r_centered, mode='full')
+            if np.max(np.abs(xcorr)) > 1e-8:
+                peak_lag = np.argmax(xcorr) - (T - 1)
+                features.append(abs(peak_lag) / T)
+            else:
+                features.append(0.0)
+        else:
+            features.append(0.0)
+    
+    # 5. Stride regularity via autocorrelation of hip joints
+    for j in [JOINT_L_HIP, JOINT_R_HIP, JOINT_L_KNEE, JOINT_R_KNEE]:
+        sig = joint_angles[:, j]
+        if T > 20 and np.std(sig) > 1e-8:
+            sig_centered = sig - np.mean(sig)
+            autocorr = np.correlate(sig_centered, sig_centered, mode='full')
+            autocorr = autocorr[T-1:]  # positive lags only
+            autocorr = autocorr / (autocorr[0] + 1e-8)
+            
+            # Find first peak after initial decay (stride period)
+            min_lag = max(5, T // 20)
+            max_lag = min(T // 2, T - 1)
+            if max_lag > min_lag:
+                segment = autocorr[min_lag:max_lag]
+                if len(segment) > 0:
+                    peak_val = np.max(segment)
+                    peak_idx = np.argmax(segment) + min_lag
+                    features.extend([peak_val, peak_idx / T])
+                else:
+                    features.extend([0.0, 0.0])
+            else:
+                features.extend([0.0, 0.0])
+        else:
+            features.extend([0.0, 0.0])
+    
+    # 6. Frequency domain features for key joints
+    for j in [JOINT_L_HIP, JOINT_R_HIP, JOINT_L_KNEE, JOINT_R_KNEE,
+              JOINT_L_ANKLE, JOINT_R_ANKLE]:
+        sig = joint_angles[:, j]
+        if T > 10:
+            fft_vals = np.abs(np.fft.rfft(sig - np.mean(sig)))
+            freqs = np.fft.rfftfreq(T, d=1.0/30.0)  # 30 fps
+            
+            total_power = np.sum(fft_vals**2) + 1e-8
+            
+            # Power in different frequency bands
+            low_mask = freqs < 1.0  # < 1 Hz
+            mid_mask = (freqs >= 1.0) & (freqs < 3.0)  # 1-3 Hz (normal gait)
+            high_mask = freqs >= 3.0  # > 3 Hz (tremor range)
+            
+            low_power = np.sum(fft_vals[low_mask]**2) / total_power
+            mid_power = np.sum(fft_vals[mid_mask]**2) / total_power
+            high_power = np.sum(fft_vals[high_mask]**2) / total_power
+            
+            # Dominant frequency
+            if len(fft_vals) > 1:
+                dom_freq = freqs[np.argmax(fft_vals[1:]) + 1]
+            else:
+                dom_freq = 0.0
+            
+            features.extend([low_power, mid_power, high_power, dom_freq])
+        else:
+            features.extend([0.0, 0.0, 0.0, 0.0])
+    
+    # 7. Overall motion statistics
+    total_motion = np.sum(joint_angles, axis=1)  # (T,)
+    features.extend([np.mean(total_motion), np.std(total_motion),
+                    np.min(total_motion), np.max(total_motion)])
+    
+    # 8. Pelvis stability (trunk control)
+    pelvis = pose_reshaped[:, JOINT_PELVIS, :]  # (T, 3)
+    pelvis_mag = np.linalg.norm(pelvis, axis=-1)
+    features.extend([np.mean(pelvis_mag), np.std(pelvis_mag)])
+    if T > 1:
+        pelvis_vel = np.linalg.norm(np.diff(pelvis, axis=0), axis=-1)
+        features.extend([np.mean(pelvis_vel), np.std(pelvis_vel), np.max(pelvis_vel)])
+    else:
+        features.extend([0.0, 0.0, 0.0])
+    
+    # 9. Walk duration (proxy for speed)
+    features.append(T / 30.0)  # duration in seconds
+    
+    # 10. Range of motion for key joints
+    for j in GAIT_JOINTS:
+        rom = np.max(joint_angles[:, j]) - np.min(joint_angles[:, j])
+        features.append(rom)
+    
+    return np.array(features, dtype=np.float32)
+
+
+# ── MotionCLIP encoder ──────────────────────────────────────────────────────
+
+class _PosEnc(nn.Module):
+    def __init__(self, d: int, drop: float = 0.1, max_len: int = 5000):
+        super().__init__()
+        self.drop = nn.Dropout(drop)
+        pe = torch.zeros(max_len, d)
+        pos = torch.arange(0, max_len).float().unsqueeze(1)
+        div = torch.exp(torch.arange(0, d, 2).float() * (-np.log(10000.0) / d))
+        pe[:, 0::2] = torch.sin(pos * div)
+        pe[:, 1::2] = torch.cos(pos * div)
+        self.register_buffer('pe', pe.unsqueeze(0).transpose(0, 1))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.drop(x + self.pe[:x.shape[0]])
+
+
+class MotionCLIPEncoder(nn.Module):
+    def __init__(self, njoints=25, nfeats=6, latent_dim=512, ff_size=1024,
+                 num_layers=8, num_heads=4, dropout=0.1):
+        super().__init__()
+        self.input_feats = njoints * nfeats
+        self.latent_dim = latent_dim
+        self.muQuery = nn.Parameter(torch.randn(1, latent_dim))
+        self.sigmaQuery = nn.Parameter(torch.randn(1, latent_dim))
+        self.embed = nn.Linear(self.input_feats, latent_dim)
+        self.pos_enc = _PosEnc(latent_dim, dropout)
+        layer = nn.TransformerEncoderLayer(
+            d_model=latent_dim, nhead=num_heads,
+            dim_feedforward=ff_size, dropout=dropout, activation='gelu')
+        self.encoder = nn.TransformerEncoder(layer, num_layers=num_layers)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        B, T, J, F = x.shape
+        x = x.permute(1, 0, 2, 3).reshape(T, B, J * F)
+        x = self.embed(x)
+        y = torch.zeros(B, dtype=torch.long, device=x.device)
+        xseq = torch.cat([self.muQuery[y].unsqueeze(0),
+                          self.sigmaQuery[y].unsqueeze(0), x], dim=0)
+        xseq = self.pos_enc(xseq)
+        mask = torch.ones(B, T + 2, dtype=torch.bool, device=x.device)
+        out = self.encoder(xseq, src_key_padding_mask=~mask)
+        return out[0]
+
+
+def _load_checkpoint(model, path):
+    ckpt = torch.load(path, map_location='cpu', weights_only=False)
+    sd = ckpt.get('state_dict', ckpt)
+    msd = model.state_dict()
+    first = next(iter(msd))
+    new = collections.OrderedDict()
+    for k, v in sd.items():
+        if k.startswith('module.') and 'module.' not in first:
+            k = k[7:]
+        if k in msd:
+            new[k] = v
+    msd.update(new)
+    model.load_state_dict(msd, strict=True)
+    print(f'[genome] checkpoint: {len(new)}/{len(msd)} layers loaded from {os.path.basename(path)}')
+    return model
+
+
+def load_motionclip(care_pd_dir):
+    if care_pd_dir is None:
+        return None
+    ckpt = os.path.join(care_pd_dir, 'assets', 'Pretrained_checkpoints',
+                        'motionclip', 'motionclip_encoder_checkpoint_0100.pth.tar')
+    if not os.path.isfile(ckpt):
+        print(f'[genome] MotionCLIP checkpoint not found: {ckpt}')
+        return None
+    try:
+        enc = MotionCLIPEncoder(njoints=25, nfeats=6, latent_dim=512,
+                                ff_size=1024, num_layers=8, num_heads=4).to(DEVICE)
+        _load_checkpoint(enc, ckpt)
+        enc.eval()
+        for p in enc.parameters():
+            p.requires_grad_(False)
+        return enc
+    except Exception as e:
+        print(f'[genome] MotionCLIP load failed: {e}')
+        return None
+
+
+# ── Multi-window feature extraction ─────────────────────────────────────────
+
+@torch.no_grad()
+def extract_multiwindow_features(encoder: nn.Module, pose: np.ndarray,
+                                  window_size: int = 60, stride: int = 15) -> np.ndarray:
+    """
+    Extract MotionCLIP features from multiple sliding windows.
+    Returns aggregated statistics: mean, std, min, max of 512-dim embeddings.
+    """
+    rot6d = smpl_to_6d(pose)  # (T, 25, 6)
+    T = len(rot6d)
+    
+    windows = []
+    if T >= window_size:
+        # Sliding windows
+        starts = list(range(0, T - window_size + 1, stride))
+        if not starts:
+            starts = [0]
+        # Always include start, center, and end
+        center_start = (T - window_size) // 2
+        end_start = T - window_size
+        for s in [0, center_start, end_start]:
+            if s not in starts:
+                starts.append(s)
+        starts = sorted(set(starts))
+        
+        for s in starts:
+            windows.append(rot6d[s:s + window_size])
+    else:
+        # Pad and use single window
+        windows.append(crop_pad_frames(rot6d, window_size))
+    
+    # Batch encode all windows
+    batch = np.stack(windows)  # (W, 60, 25, 6)
+    x = torch.from_numpy(batch).float().to(DEVICE)
+    
+    # Process in chunks to avoid OOM
+    chunk_size = 32
+    embs = []
+    for i in range(0, len(x), chunk_size):
+        embs.append(encoder(x[i:i+chunk_size]).cpu().numpy())
+    embs = np.vstack(embs)  # (W, 512)
+    
+    # Aggregate: mean, std, min, max, first, last
+    feat_mean = np.mean(embs, axis=0)
+    feat_std = np.std(embs, axis=0)
+    feat_min = np.min(embs, axis=0)
+    feat_max = np.max(embs, axis=0)
+    
+    # Temporal variation: difference between first and last window
+    feat_diff = embs[-1] - embs[0] if len(embs) > 1 else np.zeros(512, dtype=np.float32)
+    
+    return np.concatenate([feat_mean, feat_std, feat_min, feat_max, feat_diff])
+
+
+@torch.no_grad()
+def extract_all_features(encoder, poses):
+    """Extract combined MotionCLIP multi-window + handcrafted features."""
+    all_feats = []
+    for pose in poses:
+        # Handcrafted features
+        hc_feat = extract_handcrafted_features(pose)
+        
+        if encoder is not None:
+            # Multi-window MotionCLIP features
+            mc_feat = extract_multiwindow_features(encoder, pose)
+            feat = np.concatenate([mc_feat, hc_feat])
+        else:
+            # Fallback: 6D rotation stats + handcrafted
+            r = smpl_to_6d(pose).reshape(len(pose), -1)
+            r_feat = np.concatenate([r.mean(0), r.std(0), r.min(0), r.max(0)])
+            feat = np.concatenate([r_feat, hc_feat])
+        
+        all_feats.append(feat)
+    
+    return np.stack(all_feats)
+
+
+# ── Classifier ───────────────────────────────────────────────────────────────
+
+class ClassifierMLP(nn.Module):
+    def __init__(self, in_dim, n_classes=3, dropout=0.4):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(in_dim, 512), nn.BatchNorm1d(512), nn.GELU(), nn.Dropout(dropout),
+            nn.Linear(512, 256), nn.BatchNorm1d(256), nn.GELU(), nn.Dropout(dropout * 0.7),
+            nn.Linear(256, 128), nn.BatchNorm1d(128), nn.GELU(), nn.Dropout(dropout * 0.5),
+            nn.Linear(128, 64), nn.GELU(), nn.Dropout(0.1),
+            nn.Linear(64, n_classes),
+        )
+
+    def forward(self, x):
+        return self.net(x)
+
+
+class FocalLoss(nn.Module):
+    def __init__(self, alpha=None, gamma=2.0):
+        super().__init__()
+        self.alpha = alpha  # per-class weights tensor
+        self.gamma = gamma
+
+    def forward(self, logits, targets):
+        ce = nn.functional.cross_entropy(logits, targets, weight=self.alpha, reduction='none')
+        pt = torch.exp(-ce)
+        return ((1 - pt) ** self.gamma * ce).mean()
+
+
+def oversample_minority(X, y, target_ratio=None):
+    """Oversample minority classes to balance the dataset."""
+    classes, counts = np.unique(y, return_counts=True)
+    max_count = np.max(counts)
+    
+    X_new, y_new = [X], [y]
+    for cls, cnt in zip(classes, counts):
+        if cnt < max_count:
+            # How many extra samples needed
+            n_extra = max_count - cnt
+            idx = np.where(y == cls)[0]
+            # Random oversample with slight noise
+            extra_idx = np.random.choice(idx, size=n_extra, replace=True)
+            X_extra = X[extra_idx].copy()
+            # Add small Gaussian noise for regularization
+            noise_scale = np.std(X, axis=0) * 0.01
+            X_extra += np.random.randn(*X_extra.shape) * noise_scale[np.newaxis, :]
+            X_new.append(X_extra)
+            y_new.append(np.full(n_extra, cls, dtype=y.dtype))
+    
+    return np.vstack(X_new), np.concatenate(y_new)
+
+
+def train_ensemble(feat_train, y_train, feat_test, n_classes=3):
+    """Train an ensemble of GBM + RF + MLP classifiers."""
+    
+    # Standardize features
+    scaler = StandardScaler()
+    X_tr = scaler.fit_transform(feat_train)
+    X_te = scaler.transform(feat_test)
+    
+    # Replace NaN/Inf
+    X_tr = np.nan_to_num(X_tr, nan=0.0, posinf=0.0, neginf=0.0)
+    X_te = np.nan_to_num(X_te, nan=0.0, posinf=0.0, neginf=0.0)
+    
+    # Class weights
+    counts = np.bincount(y_train, minlength=n_classes).astype(float)
+    counts = np.where(counts == 0, 1.0, counts)
+    class_weights = counts.sum() / (n_classes * counts)
+    # Boost class 2 weight extra
+    class_weights[2] *= 1.5
+    sample_weight_dict = {i: class_weights[i] for i in range(n_classes)}
+    
+    predictions = []
+    probas = []
+    
+    # 1. Gradient Boosting Classifier
+    try:
+        gb = GradientBoostingClassifier(
+            n_estimators=300, max_depth=4, learning_rate=0.05,
+            subsample=0.8, min_samples_leaf=5, min_samples_split=10,
+            random_state=42
+        )
+        sample_weights = np.array([class_weights[y] for y in y_train])
+        gb.fit(X_tr, y_train, sample_weight=sample_weights)
+        gb_proba = gb.predict_proba(X_te)
+        probas.append(gb_proba)
+        print(f'  [ensemble] GBM trained', flush=True)
+    except Exception as e:
+        print(f'  [ensemble] GBM failed: {e}', flush=True)
+    
+    # 2. Random Forest
+    try:
+        rf = RandomForestClassifier(
+            n_estimators=500, max_depth=8, min_samples_leaf=3,
+            class_weight={0: class_weights[0], 1: class_weights[1], 2: class_weights[2]},
+            random_state=42, n_jobs=-1
+        )
+        rf.fit(X_tr, y_train)
+        rf_proba = rf.predict_proba(X_te)
+        probas.append(rf_proba)
+        print(f'  [ensemble] RF trained', flush=True)
+    except Exception as e:
+        print(f'  [ensemble] RF failed: {e}', flush=True)
+    
+    # 3. MLP with oversampling
+    try:
+        mlp_proba = train_mlp_classifier(X_tr, y_train, X_te, class_weights)
+        probas.append(mlp_proba)
+        print(f'  [ensemble] MLP trained', flush=True)
+    except Exception as e:
+        print(f'  [ensemble] MLP failed: {e}', flush=True)
+    
+    # 4. Second GBM with different hyperparams
+    try:
+        gb2 = GradientBoostingClassifier(
+            n_estimators=200, max_depth=3, learning_rate=0.1,
+            subsample=0.7, min_samples_leaf=8,
+            random_state=123
+        )
+        sample_weights2 = np.array([class_weights[y] for y in y_train])
+        gb2.fit(X_tr, y_train, sample_weight=sample_weights2)
+        gb2_proba = gb2.predict_proba(X_te)
+        probas.append(gb2_proba)
+        print(f'  [ensemble] GBM2 trained', flush=True)
+    except Exception as e:
+        print(f'  [ensemble] GBM2 failed: {e}', flush=True)
+    
+    if not probas:
+        # Ultimate fallback
+        return np.ones(len(X_te), dtype=np.int64)
+    
+    # Weighted ensemble averaging
+    # Give more weight to GBM (typically best for tabular)
+    weights = [2.0, 1.5, 1.5, 1.0][:len(probas)]
+    weights = np.array(weights) / sum(weights)
+    
+    avg_proba = sum(w * p for w, p in zip(weights, probas))
+    
+    # Apply class-specific temperature/bias to help class 2
+    # Slight boost to class 2 predictions
+    avg_proba[:, 2] *= 1.15
+    
+    preds = np.argmax(avg_proba, axis=1)
+    return preds
+
+
+def train_mlp_classifier(X_tr, y_train, X_te, class_weights,
+                          epochs=200, lr=5e-4):
+    """Train MLP classifier with oversampling and return probabilities."""
+    n_classes = 3
+    
+    # Oversample minority classes
+    X_os, y_os = oversample_minority(X_tr, y_train)
+    
+    # Shuffle
+    perm = np.random.permutation(len(X_os))
+    X_os, y_os = X_os[perm], y_os[perm]
+    
+    in_dim = X_tr.shape[1]
+    clf = ClassifierMLP(in_dim=in_dim, n_classes=n_classes, dropout=0.4).to(DEVICE)
+    
+    w = torch.tensor(class_weights, dtype=torch.float32).to(DEVICE)
+    loss_fn = FocalLoss(alpha=w, gamma=2.5)
+    
+    opt = optim.AdamW(clf.parameters(), lr=lr, weight_decay=5e-3)
+    sch = optim.lr_scheduler.CosineAnnealingWarmRestarts(opt, T_0=50, T_mult=2)
+    
+    X_train_t = torch.from_numpy(X_os.astype(np.float32)).to(DEVICE)
+    y_train_t = torch.tensor(y_os, dtype=torch.long).to(DEVICE)
+    X_test_t = torch.from_numpy(X_te.astype(np.float32)).to(DEVICE)
+    
+    N, bs = len(X_train_t), 64
+    clf.train()
+    for epoch in range(epochs):
+        perm = torch.randperm(N)
+        for s in range(0, N, bs):
+            b = perm[s:s + bs]
+            opt.zero_grad()
+            loss = loss_fn(clf(X_train_t[b]), y_train_t[b])
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(clf.parameters(), 1.0)
+            opt.step()
+        sch.step()
+    
+    clf.eval()
+    with torch.no_grad():
+        logits = clf(X_test_t)
+        proba = torch.softmax(logits, dim=1).cpu().numpy()
+    
+    return proba
+
+
+def train_and_predict(train_poses, y_train, test_poses, care_pd_dir=None):
+    """Main prediction pipeline with multi-window MotionCLIP + handcrafted features + ensemble."""
+    
+    enc = load_motionclip(care_pd_dir)
+    
+    print(f'[genome] Extracting features (encoder={"MotionCLIP" if enc else "fallback"}, device={DEVICE})', flush=True)
+    
+    feat_tr = extract_all_features(enc, train_poses)
+    feat_te = extract_all_features(enc, test_poses)
+    
+    print(f'[genome] Feature dim: {feat_tr.shape[1]}, train: {len(feat_tr)}, test: {len(feat_te)}', flush=True)
+    print(f'[genome] Label distribution: {dict(zip(*np.unique(y_train, return_counts=True)))}', flush=True)
+    
+    preds = train_ensemble(feat_tr, y_train, feat_te)
+    
+    return preds
+
+# ===========================================================================
+# EVOLVE-BLOCK-END
+# ===========================================================================
+
+
+def run_evaluation(data: dict, folds: dict, care_pd_dir: str = None) -> dict:
+    all_preds, all_labels = [], []
+    per_fold_results = {}
+
+    for fold_id, split in folds.items():
+        def get_data(subjects):
+            poses, labels = [], []
+            for sub in subjects:
+                if sub not in data:
+                    continue
+                for wd in data[sub].values():
+                    poses.append(wd['pose'].astype(np.float32))
+                    labels.append(int(wd['UPDRS_GAIT']))
+            return poses, np.array(labels, dtype=np.int64)
+
+        tr_poses, y_tr = get_data(split['train'])
+        te_poses, y_te = get_data(split['eval'])
+
+        if not te_poses or len(np.unique(y_tr)) < 2:
+            continue
+
+        preds = train_and_predict(tr_poses, y_tr, te_poses, care_pd_dir=care_pd_dir)
+        all_preds.extend(preds.tolist())
+        all_labels.extend(y_te.tolist())
+
+        fold_f1 = float(f1_score(y_te, preds, average='macro', zero_division=0))
+        pc_f1 = f1_score(y_te, preds, average=None, labels=[0,1,2], zero_division=0)
+        per_fold_results[str(fold_id)] = {
+            'macro_f1': round(fold_f1, 4),
+            'n_test_walks': int(len(y_te)),
+            'n_train_walks': int(len(y_tr)),
+        }
+        print(f'  fold {fold_id}: macro_f1={fold_f1:.4f}  '
+              f'f1=[normal:{pc_f1[0]:.3f}, mild:{pc_f1[1]:.3f}, severe:{pc_f1[2]:.3f}]',
+              flush=True)
+
+    macro_f1 = float(f1_score(all_labels, all_preds, average='macro', zero_division=0))
+    per_class_f1 = f1_score(all_labels, all_preds, average=None, labels=[0,1,2], zero_division=0)
+
+    print(f'\n[result] macro_f1={macro_f1:.4f}  '
+          f'f1_class=[normal:{per_class_f1[0]:.4f}, mild:{per_class_f1[1]:.4f}, '
+          f'severe:{per_class_f1[2]:.4f}]  device={DEVICE}', flush=True)
+
+    return {
+        'combined_score': macro_f1,
+        'all_preds': all_preds,
+        'all_labels': all_labels,
+        'per_fold_results': per_fold_results,
+        'per_class_f1': per_class_f1.tolist(),
+    }
+```
+</CODE>

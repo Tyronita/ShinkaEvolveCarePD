@@ -1,0 +1,68 @@
+<NAME>
+add_joint_coordination_features
+</NAME>
+
+<DESCRIPTION>
+Add joint-pair coordination features capturing inter-limb coupling breakdown characteristic of PD. Compute cross-correlation between left and right hip rotations (joints 1 and 2), left and right knee rotations (joints 4 and 5), and pelvis-ankle coupling (joint 0 with joints 7 and 8) — for each pair, compute the normalized cross-correlation at lags [-5, 0, +5] frames, yielding 3 lags × 5 pairs = 15 features capturing the bilateral coordination deficit that worsens with PD severity. Additionally, compute the ratio of pelvis rotation variance to ankle rotation variance as a proxy for proximal-distal movement coupling, which clinical literature identifies as a key mild/severe discriminator. Place all new feature computation inside `extract_gait_features` before the final `np.concatenate` to maintain the proven pipeline structure.
+</DESCRIPTION>
+
+<DIFF>
+<<<<<<< SEARCH
+    # 9. Sequence length (normalized) — PD patients may have shorter walks
+    features.append(np.array([T / 30.0, np.log1p(T)]))
+
+    return np.concatenate([f.ravel() for f in features])
+=======
+    # 9. Joint coordination and coupling features
+    # Left-right coordination: compute cross-correlation at key joint pairs
+    coord_pairs = [(1,2), (4,5)]  # Hip pairs and knee pairs
+    for l_idx, r_idx in coord_pairs:
+        # Extract and mean-center the 6D rotations
+        l_rot = rot6d[:, l_idx, :] - rot6d[:, l_idx, :].mean(axis=0)
+        r_rot = rot6d[:, r_idx, :] - rot6d[:, r_idx, :].mean(axis=0)
+
+        # Compute normalized cross-correlation across selected lags
+        for comp in range(6):  # All rotation components
+            l_signal = l_rot[:, comp]
+            r_signal = r_rot[:, comp]
+            # Cross-correlation normalized by autocorrelations
+            xcorr = np.correlate(l_signal, r_signal, 'full')
+            # Normalize by geometric mean of autocorrelations
+            l_auto = np.correlate(l_signal, l_signal, 'full')
+            r_auto = np.correlate(r_signal, r_signal, 'full')
+            den = np.sqrt(l_auto[len(l_auto)//2] * r_auto[len(r_auto)//2]) + 1e-8
+            xcorr = xcorr / den
+            # Sample at lags -5, 0, 5
+            center = len(xcorr) // 2
+            lags = [center - 5, center, center + 5]
+            lag_values = [xcorr[l] for l in lags if 0 <= l < len(xcorr)]
+            features.append(np.array(lag_values))
+
+    # Pelvis-ankle coupling: phase relationship between trunk and foot
+    pelvis_rot = rot6d[:, 0, :]
+    for ankle_idx in [7, 8]:  # L and R ankles
+        ankle_rot = rot6d[:, ankle_idx, :]
+        for comp in range(3):  # First 3 components
+            # Cross-correlation between pelvis and ankle rotation
+            p_signal = pelvis_rot[:, comp] - pelvis_rot[:, comp].mean()
+            a_signal = ankle_rot[:, comp] - ankle_rot[:, comp].mean()
+            xcorr = np.correlate(p_signal, a_signal, 'full')
+            p_auto = np.correlate(p_signal, p_signal, 'full')
+            a_auto = np.correlate(a_signal, a_signal, 'full')
+            den = np.sqrt(p_auto[len(p_auto)//2] * a_auto[len(a_auto)//2]) + 1e-8
+            xcorr = xcorr / den
+            center = len(xcorr) // 2
+            peak = np.argmax(np.abs(xcorr[center-10:center+10])) - 10
+            features.append(np.array([peak]))
+
+    # Proximal-distal coupling ratio (trunk vs foot)
+    pelvis_var = rot6d[:, 0, :].var()
+    ankle_var = rot6d[:, 7, :].var() + rot6d[:, 8, :].var() + 1e-8
+    features.append(np.array([pelvis_var / ankle_var]))
+
+    # 10. Sequence length (normalized) — PD patients may have shorter walks
+    features.append(np.array([T / 30.0, np.log1p(T)]))
+
+    return np.concatenate([f.ravel() for f in features])
+>>>>>>> REPLACE
+</DIFF>

@@ -1,0 +1,130 @@
+<NAME>
+add_jerk_features_for_severe_pd
+</NAME>
+
+<DESCRIPTION>
+The current bottleneck is the severe PD class (class 2) with F1=0.52. The confusion matrix shows 56 normal→severe and 34 mild→severe misclassifications, indicating the classifier struggles to distinguish severe from milder forms. 
+
+Jerk (3rd derivative of rotation) captures movement smoothness and is a key biomarker in severe PD where movements become fragmented and dyskinetic. Adding jerk statistics as features will provide discriminative power for the severe class.
+
+We extend the feature extraction to include:
+1. Jerk (3rd derivative) statistics: mean, std, and abs_mean of acceleration differences
+2. These features are added in a new section after acceleration statistics
+3. The features are computed only when T>3 to ensure valid derivatives
+
+This change targets the primary bottleneck by adding neurologically meaningful features that quantify the loss of movement smoothness in advanced PD.
+</DESCRIPTION>
+
+<DIFF>
+<<<<<<< SEARCH
+    # 3. Acceleration statistics (second derivative)
+    if T > 2:
+        acc = np.diff(vel, axis=0)  # (T-2, 144)
+        features.append(acc.mean(0))     # (144,)
+        features.append(acc.std(0))      # (144,)
+        features.append(np.abs(acc).mean(0))  # jerkiness
+    else:
+        features.extend([np.zeros(144)] * 3)
+=======
+    # 3. Acceleration statistics (second derivative)
+    if T > 2:
+        acc = np.diff(vel, axis=0)  # (T-2, 144)
+        features.append(acc.mean(0))     # (144,)
+        features.append(acc.std(0))      # (144,)
+        features.append(np.abs(acc).mean(0))  # jerkiness
+    else:
+        features.extend([np.zeros(144)] * 3)
+        
+    # 4. Jerk statistics (third derivative) - captures movement smoothness
+    # Critical for distinguishing severe PD (class 2) which shows fragmented movements
+    if T > 3:
+        jerk = np.diff(acc, axis=0)  # (T-3, 144)
+        features.append(jerk.mean(0))      # (144,)
+        features.append(jerk.std(0))       # (144,)
+        features.append(np.abs(jerk).mean(0))  # (144,)
+    else:
+        features.extend([np.zeros(144)] * 3)
+        
+    # Re-index subsequent sections (asymmetry becomes section 5, etc.)
+>>>>>>> REPLACE
+</DIFF>
+
+<DIFF>
+<<<<<<< SEARCH
+    # 4. Left-right asymmetry
+    asym_pairs = [(1,2), (4,5), (7,8), (10,11)]  # hip, knee, ankle, foot
+    for l_idx, r_idx in asym_pairs:
+        diff = rot6d[:, l_idx, :] - rot6d[:, r_idx, :]  # (T, 6)
+        features.append(diff.mean(0))   # (6,)
+        features.append(diff.std(0))    # (6,)
+=======
+    # 5. Left-right asymmetry
+    asym_pairs = [(1,2), (4,5), (7,8), (10,11)]  # hip, knee, ankle, foot
+    for l_idx, r_idx in asym_pairs:
+        diff = rot6d[:, l_idx, :] - rot6d[:, r_idx, :]  # (T, 6)
+        features.append(diff.mean(0))   # (6,)
+        features.append(diff.std(0))    # (6,)
+>>>>>>> REPLACE
+</DIFF>
+
+<DIFF>
+<<<<<<< SEARCH
+    # 5. Velocity features for key gait joints
+    key_joints = [0, 1, 2, 4, 5, 7, 8, 10, 11]  # pelvis, hips, knees, ankles, feet
+    if T > 1:
+        joint_vel = np.diff(rot6d[:, :24, :], axis=0)  # (T-1, 24, 6)
+        for j in key_joints:
+            jv = joint_vel[:, j, :]  # (T-1, 6)
+            features.append(jv.mean(0))  # (6,)
+            features.append(jv.std(0))   # (6,)
+    else:
+        features.extend([np.zeros(6)] * 18)  # 9 joints × 2 stats
+=======
+    # 6. Velocity features for key gait joints
+    key_joints = [0, 1, 2, 4, 5, 7, 8, 10, 11]  # pelvis, hips, knees, ankles, feet
+    if T > 1:
+        joint_vel = np.diff(rot6d[:, :24, :], axis=0)  # (T-1, 24, 6)
+        for j in key_joints:
+            jv = joint_vel[:, j, :]  # (T-1, 6)
+            features.append(jv.mean(0))  # (6,)
+            features.append(jv.std(0))   # (6,)
+    else:
+        features.extend([np.zeros(6)] * 18)  # 9 joints × 2 stats
+>>>>>>> REPLACE
+</DIFF>
+
+<DIFF>
+<<<<<<< SEARCH
+    # 6. Frequency domain features from pelvis and ankle
+    freqs = np.fft.rfftfreq(T, d=1.0/30) if T > 1 else [0]
+    for j_idx in [0, 7, 8]:  # pelvis, L_ankle, R_ankle
+=======
+    # 7. Frequency domain features from pelvis and ankle
+    freqs = np.fft.rfftfreq(T, d=1.0/30) if T > 1 else [0]
+    for j_idx in [0, 7, 8]:  # pelvis, L_ankle, R_ankle
+>>>>>>> REPLACE
+</DIFF>
+
+<DIFF>
+<<<<<<< SEARCH
+    # 7. Gait regularity from pelvis autocorrelation
+    if T > 1:
+=======
+    # 8. Gait regularity from pelvis autocorrelation
+    if T > 1:
+>>>>>>> REPLACE
+</DIFF>
+
+<DIFF>
+<<<<<<< SEARCH
+    # 8. Sequence-level features
+    duration = T / 30.0
+    step_features = np.array([duration, np.log1p(T)])
+    features.append(step_features)
+=======
+    # 9. Sequence-level features
+    duration = T / 30.0
+    step_features = np.array([duration, np.log1p(T)])
+    features.append(step_features)
+>>>>>>> REPLACE
+</DIFF>
