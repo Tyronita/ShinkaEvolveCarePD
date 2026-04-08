@@ -1,0 +1,132 @@
+<NAME>
+fix_weighted_loss_bug
+</NAME>
+
+<DESCRIPTION>
+The current code calculates class weights `w` but never passes them to the loss function. The FocalLoss is using fixed alpha=0.25 instead of the computed per-class weights. This is a critical bug that prevents recovery of class 2 (severe PD) which requires higher loss weight. We must fix this by either modifying FocalLoss to accept the computed weights or switching to CrossEntropyLoss with weight argument.
+
+This fix directly addresses the primary bottleneck: class 2 recall is 0.00 across all versions due to this weighting bug. The computed weights will boost the gradient contribution from class 2 samples (weight ~1.59) while reducing class 0 contribution (weight ~0.68), forcing the model to pay attention to severe PD cases.
+</DESCRIPTION>
+
+<DIFF>
+<<<<<<< SEARCH
+    counts  = np.bincount(y_train, minlength=n_cls).astype(float)
+    counts  = np.where(counts == 0, 1.0, counts)
+    # Class weights: inverse frequency, normalized
+    w       = torch.tensor(counts.sum() / (n_cls * counts), dtype=torch.float32).to(DEVICE)
+
+    clf  = ClassifierMLP(in_dim=feat_train.shape[1], n_classes=n_cls).to(DEVICE)
+    opt  = optim.AdamW(clf.parameters(), lr=lr, weight_decay=1e-3)
+    loss_fn = FocalLoss(alpha=0.25, gamma=2.0)
+    sch  = optim.lr_scheduler.CosineAnnealingLR(opt, T_max=epochs)
+=======
+    counts  = np.bincount(y_train, minlength=n_cls).astype(float)
+    counts  = np.where(counts == 0, 1.0, counts)
+    # Class weights: inverse frequency, normalized
+    w       = torch.tensor(counts.sum() / (n_cls * counts), dtype=torch.float32).to(DEVICE)
+
+    clf  = ClassifierMLP(in_dim=feat_train.shape[1], n_classes=n_cls).to(DEVICE)
+    opt  = optim.AdamW(clf.parameters(), lr=lr, weight_decay=1e-3)
+    loss_fn = nn.CrossEntropyLoss(weight=w)
+    sch  = optim.lr_scheduler.CosineAnnealingLR(opt, T_max=epochs)
+>>>>>>> REPLACE
+</DIFF>
+
+<NAME>
+add_class2_oversampling
+</NAME>
+
+<DESCRIPTION>
+Add oversampling of class 2 (severe PD) samples during training to further counteract class imbalance. With only 164 severe cases versus 341 normal, the model naturally biases toward class 0. By repeating class 2 samples in each epoch, we ensure the classifier sees balanced examples. This combined with the weighted loss creates a dual defense against class imbalance.
+
+The oversampling strategy computes how many times to repeat class 2 samples to match the majority class size, then constructs augmented training indices. This is particularly important for small datasets like this (781 samples) where class 2 has minimal representation.
+</DESCRIPTION>
+
+<DIFF>
+<<<<<<< SEARCH
+def train_classifier(feat_train: np.ndarray, y_train: np.ndarray,
+                     feat_test:  np.ndarray,
+                     epochs: int = 150, lr: float = 1e-3) -> np.ndarray:
+    """
+    Train ClassifierMLP on precomputed MotionCLIP features.
+
+    Class weights computed from training label distribution to handle imbalance.
+    Uses FocalLoss + AdamW + cosine LR schedule.
+
+    Mutable: epochs, lr, batch_size, loss function, optimizer, schedule.
+    """
+    n_cls   = 3
+    counts  = np.bincount(y_train, minlength=n_cls).astype(float)
+    counts  = np.where(counts == 0, 1.0, counts)
+    # Class weights: inverse frequency, normalized
+    w       = torch.tensor(counts.sum() / (n_cls * counts), dtype=torch.float32).to(DEVICE)
+
+    clf  = ClassifierMLP(in_dim=feat_train.shape[1], n_classes=n_cls).to(DEVICE)
+    opt  = optim.AdamW(clf.parameters(), lr=lr, weight_decay=1e-3)
+    loss_fn = nn.CrossEntropyLoss(weight=w)
+    sch  = optim.lr_scheduler.CosineAnnealingLR(opt, T_max=epochs)
+
+    X_tr = torch.from_numpy(feat_train.astype(np.float32)).to(DEVICE)
+    y_tr = torch.tensor(y_train, dtype=torch.long).to(DEVICE)
+    X_te = torch.from_numpy(feat_test.astype(np.float32)).to(DEVICE)
+
+    N, bs = len(X_tr), 64
+    clf.train()
+    for _ in range(epochs):
+        perm = torch.randperm(N)
+        for s in range(0, N, bs):
+            b = perm[s:s + bs]
+            opt.zero_grad()
+            loss_fn(clf(X_tr[b]), y_tr[b]).backward()
+            opt.step()
+        sch.step()
+=======
+def train_classifier(feat_train: np.ndarray, y_train: np.ndarray,
+                     feat_test:  np.ndarray,
+                     epochs: int = 150, lr: float = 1e-3) -> np.ndarray:
+    """
+    Train ClassifierMLP on precomputed MotionCLIP features with class-balanced sampling.
+
+    Uses both sample re-weighting and class 2 oversampling to handle imbalance.
+    Class 2 (severe) samples are repeated to balance training batches.
+    """
+    n_cls   = 3
+    counts  = np.bincount(y_train, minlength=n_cls).astype(float)
+    counts  = np.where(counts == 0, 1.0, counts)
+    # Class weights: inverse frequency, normalized
+    w       = torch.tensor(counts.sum() / (n_cls * counts), dtype=torch.float32).to(DEVICE)
+
+    clf  = ClassifierMLP(in_dim=feat_train.shape[1], n_classes=n_cls).to(DEVICE)
+    opt  = optim.AdamW(clf.parameters(), lr=lr, weight_decay=1e-3)
+    loss_fn = nn.CrossEntropyLoss(weight=w)
+    sch  = optim.lr_scheduler.CosineAnnealingLR(opt, T_max=epochs)
+
+    X_tr = torch.from_numpy(feat_train.astype(np.float32)).to(DEVICE)
+    y_tr = torch.tensor(y_train, dtype=torch.long).to(DEVICE)
+    X_te = torch.from_numpy(feat_test.astype(np.float32)).to(DEVICE)
+
+    # Create balanced indices with oversampling of class 2
+    idx2 = torch.where(y_tr == 2)[0]
+    if len(idx2) > 0:
+        # Repeat class 2 samples to balance with largest class
+        n_repeat = max(1, int(torch.bincount(y_tr).max().item() // len(idx2)))
+        if n_repeat > 1:
+            idx2 = idx2.repeat(n_repeat)
+        # Combine original indices with oversampled class 2
+        indices = torch.cat([torch.arange(len(y_tr)), idx2])
+    else:
+        indices = torch.arange(len(y_tr))
+
+    N, bs = len(indices), 64
+    clf.train()
+    for _ in range(epochs):
+        perm = torch.randperm(N)
+        for s in range(0, N, bs):
+            b = perm[s:s + bs]
+            batch_idx = indices[b]
+            opt.zero_grad()
+            loss_fn(clf(X_tr[batch_idx]), y_tr[batch_idx]).backward()
+            opt.step()
+        sch.step()
+>>>>>>> REPLACE
+</DIFF>

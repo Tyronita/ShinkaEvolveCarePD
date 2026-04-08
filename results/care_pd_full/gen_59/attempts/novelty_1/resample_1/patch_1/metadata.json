@@ -1,0 +1,14 @@
+{
+  "generation": 59,
+  "novelty_attempt": 1,
+  "resample_attempt": 1,
+  "patch_attempt": 1,
+  "success": true,
+  "num_applied": 6,
+  "patch_name": "add_jerk_trunk_arm_features",
+  "patch_description": "The current architecture relies on handcrafted gait features but misses key dynamics for classifying severe PD (class 2). The original recipe identified this bottleneck and recommended adding Category I (jerk), Category K (trunk stability), and Category L (arm swing) features \u2014 which are partially missing here. \n\nSpecifically:\n- Jerk (3rd derivative) captures bradykinesia and movement smoothness loss \u2014 absent in current feature set.\n- Trunk stability (spine joint variability) is a key compensatory control marker in severe PD.\n- Arm swing magnitude and asymmetry from shoulder/elbow are hallmarks of PD progression.\n\nThese features directly address the 40+ severe\u2192normal and 58+ severe\u2192mild misclassifications by targeting within-walk deterioration and rigidity patterns. Adding them expands the feature vector by 144 (jerk) + 18 (spine velocity) + 36 (arm swing) = 198 dimensions, all derived from the robust 6D rotation representation.\n\nFurthermore, percentile features (10th, 25th, 75th, 90th) on joint velocities improve robustness to outliers and capture gait variability \u2014 another severe PD indicator. These were recommended in the original guidelines but missing.\n\nThis edit implements all at once to maximize the jump in class 2 F1 \u2014 the current bottleneck at 0.47.",
+  "error_msg": null,
+  "timestamp": "2026-04-06T19:29:51.735318",
+  "llm_cost": 0.00750582,
+  "llm_model": null
+}

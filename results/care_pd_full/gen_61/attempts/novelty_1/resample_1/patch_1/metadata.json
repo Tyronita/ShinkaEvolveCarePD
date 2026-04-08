@@ -1,0 +1,14 @@
+{
+  "generation": 61,
+  "novelty_attempt": 1,
+  "resample_attempt": 1,
+  "patch_attempt": 1,
+  "success": true,
+  "num_applied": 1,
+  "patch_name": "temporal_segmentation_xgb_ensemble",
+  "patch_description": "This approach draws inspiration from the prior programs' handcrafted feature + ensemble classifier architecture but introduces several novel improvements:\n\n1. **Temporal Segmentation Features**: Split each walk into 4 quarters and compute per-segment statistics, then measure the variability across segments. This captures within-walk gait deterioration and freezing episodes that whole-sequence statistics miss \u2014 directly targeting the 58+ severe cases misclassified as mild.\n\n2. **Expanded Feature Set (~2800+ dims)**: Beyond the base categories (rotation stats, velocity, acceleration, asymmetry, FFT, autocorrelation), adds:\n   - Jerk (3rd derivative) statistics for bradykinesia detection\n   - Coefficient of variation for key joints\n   - Trunk stability metrics (spine joint variability)\n   - Arm swing magnitude and asymmetry\n   - Velocity percentiles (10th, 25th, 75th, 90th)\n   - Temporal segmentation features (288 dims from rotation + 288 from velocity)\n   - Cross-joint correlation features\n   - Range of motion ratios\n\n3. **XGBoost Addition**: Adds XGBoost as a third ensemble member alongside RF and GB, providing better gradient optimization and regularization for the minority class.\n\n4. **Probability-based Threshold Tuning**: Post-hoc adjustment of decision thresholds to boost severe class recall without destroying precision on other classes.\n\n5. **SMOTE Oversampling**: Optional synthetic minority oversampling for class 2 during training.\n\n6. **Skipped MotionCLIP**: The prior results show MotionCLIP adds marginal benefit (+0.01) but costs ~1000s. Skipping it to stay fast and focus on better features.",
+  "error_msg": null,
+  "timestamp": "2026-04-06T19:54:22.765018",
+  "llm_cost": 0.32808000000000004,
+  "llm_model": null
+}

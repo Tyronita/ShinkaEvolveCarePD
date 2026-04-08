@@ -1,0 +1,14 @@
+{
+  "generation": 22,
+  "novelty_attempt": 1,
+  "resample_attempt": 1,
+  "patch_attempt": 1,
+  "success": true,
+  "num_applied": 1,
+  "patch_name": "handcrafted_gait_features_sklearn_ensemble",
+  "patch_description": "Complete architectural redesign abandoning MotionCLIP in favor of handcrafted gait features + sklearn classifiers.\n\nKey changes:\n1. **No MotionCLIP dependency** - eliminates the slow, poorly-performing frozen encoder that produces generic embeddings unsuitable for PD severity discrimination.\n2. **Rich handcrafted gait features** - physics-informed features including joint statistics, velocities, accelerations, left-right asymmetry, stride frequency via FFT, gait regularity via autocorrelation, freeze-of-gait proxies, range of motion, jerk, and per-joint energy.\n3. **Sklearn classifiers with class_weight='balanced'** - SVM, GradientBoosting, and RandomForest in a voting ensemble. These handle the small dataset (781 samples) much better than neural networks.\n4. **StandardScaler normalization** for proper feature scaling.\n5. **No GPU needed** - runs entirely on CPU with sklearn, much faster and more reliable.\n6. **Explicit class 2 recovery** via balanced class weights in all classifiers plus SMOTE-like oversampling.",
+  "error_msg": null,
+  "timestamp": "2026-04-06T15:10:31.350595",
+  "llm_cost": 0.36375500000000005,
+  "llm_model": null
+}

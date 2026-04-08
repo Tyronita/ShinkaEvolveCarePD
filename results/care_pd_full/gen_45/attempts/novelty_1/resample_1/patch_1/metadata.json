@@ -1,0 +1,14 @@
+{
+  "generation": 45,
+  "novelty_attempt": 1,
+  "resample_attempt": 1,
+  "patch_attempt": 1,
+  "success": true,
+  "num_applied": 5,
+  "patch_name": "hybrid_features_sklearn_ensemble",
+  "patch_description": "The current program uses MotionCLIP features with an MLP classifier and FocalLoss, achieving only 0.36 macro-F1 with 0.00 F1 on class 2 (severe PD). This is significantly worse than both the RandomForest baseline (0.565) and previous hybrid approaches.\n\nKey issues identified:\n1. MotionCLIP alone is insufficient - best score is 0.41 vs baseline 0.565\n2. Current MLP + FocalLoss underperforms sklearn classifiers on this small dataset\n3. Class 2 (severe PD) is completely misclassified (0.00 F1)\n\nThe solution is to shift from neural network classifiers to sklearn classifiers using handcrafted gait features as primary approach, while optionally enhancing with MotionCLIP features. This hybrid approach combines domain-specific clinical gait biomarkers with deep motion representations.\n\nThe recommended strategy:\n1. Extract comprehensive handcrafted gait features including asymmetry, ROM, and frequency-domain features\n2. Use sklearn ensemble with class_weight='balanced' \n3. Optionally combine with MotionCLIP features through concatenation\n4. Use mean pooling instead of attention pooling (removes random initialization noise)\n\nThis approach has already demonstrated success with 0.63 macro-F1 in prior experiments.",
+  "error_msg": null,
+  "timestamp": "2026-04-06T17:54:00.680377",
+  "llm_cost": 0.002445714,
+  "llm_model": null
+}

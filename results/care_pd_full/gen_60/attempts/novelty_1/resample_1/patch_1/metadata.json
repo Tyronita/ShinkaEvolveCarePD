@@ -1,0 +1,14 @@
+{
+  "generation": 60,
+  "novelty_attempt": 1,
+  "resample_attempt": 1,
+  "patch_attempt": 1,
+  "success": true,
+  "num_applied": 2,
+  "patch_name": "severe_class_weight_boost",
+  "patch_description": "The current program shows poor performance on the severe PD class (F1=0.42) despite adding complex features. The class weights are currently boosted (0:1.0, 1:1.5, 2:3.0), but the ensemble prediction uses fixed weights (0.3/0.4/0.3) that don't prioritize severe class discrimination. We should modify the class weight computation to significantly boost class 2 while tuning the Gradient Boosting learning rate to prevent overfitting. The current learning_rate=0.05 may be too aggressive for the imbalanced dataset. Reducing it to 0.03 with shallower trees (max_depth=3) will create a more conservative ensemble that doesn't overfit the majority classes while still capturing severe class patterns. This addresses the confusion matrix showing severe cases being misclassified as normal (51\u21920) and mild (50\u21921).",
+  "error_msg": null,
+  "timestamp": "2026-04-06T19:29:34.988824",
+  "llm_cost": 0.0029571,
+  "llm_model": null
+}

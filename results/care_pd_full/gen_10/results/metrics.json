@@ -1,0 +1,71 @@
+{
+    "combined_score": 0.35669991049737887,
+    "public": {
+        "macro_f1": 0.3567,
+        "n_walks": 781,
+        "f1_class0_normal": 0.5777,
+        "f1_class1_mild": 0.4924,
+        "f1_class2_severe": 0.0,
+        "per_fold_f1": {
+            "1": {
+                "macro_f1": 0.1185,
+                "n_test_walks": 159,
+                "n_train_walks": 622
+            },
+            "2": {
+                "macro_f1": 0.1667,
+                "n_test_walks": 122,
+                "n_train_walks": 659
+            },
+            "3": {
+                "macro_f1": 0.5215,
+                "n_test_walks": 143,
+                "n_train_walks": 638
+            },
+            "4": {
+                "macro_f1": 0.5602,
+                "n_test_walks": 115,
+                "n_train_walks": 666
+            },
+            "5": {
+                "macro_f1": 0.4103,
+                "n_test_walks": 135,
+                "n_train_walks": 646
+            },
+            "6": {
+                "macro_f1": 0.181,
+                "n_test_walks": 107,
+                "n_train_walks": 674
+            }
+        },
+        "confusion_matrix": [
+            [
+                251,
+                90,
+                0
+            ],
+            [
+                145,
+                130,
+                1
+            ],
+            [
+                132,
+                32,
+                0
+            ]
+        ],
+        "label_dist": {
+            "1": 276,
+            "0": 341,
+            "2": 164
+        },
+        "pred_dist": {
+            "0": 528,
+            "1": 252,
+            "2": 1
+        },
+        "mpjpe_mm": "N/A",
+        "eval_time_s": 119.14
+    }
+}

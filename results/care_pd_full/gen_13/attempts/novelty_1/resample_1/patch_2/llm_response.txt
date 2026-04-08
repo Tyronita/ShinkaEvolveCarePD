@@ -1,0 +1,19 @@
+<NAME>
+fix_unused_class_weights
+</NAME>
+
+<DESCRIPTION>
+The current program computes class weights to handle the imbalanced dataset but fails to use them in the loss function. The `w` tensor is calculated in `train_classifier()` but ignored. This is a critical bug, especially since class 2 (severe PD) has F1=0.00, indicating it's being ignored.
+
+We replace FocalLoss with nn.CrossEntropyLoss(weight=w) to directly apply the computed inverse-frequency weighting. This forces the model to pay more attention to underrepresented severe PD cases, which is crucial for clinical impact. The change is minimal but addresses the most glaring issue in the current pipeline.
+</DESCRIPTION>
+
+<DIFF>
+<<<<<<< SEARCH
+    loss_fn = FocalLoss(alpha=0.25, gamma=2.0)
+    sch  = optim.lr_scheduler.CosineAnnealingLR(opt, T_max=epochs)
+=======
+    loss_fn = nn.CrossEntropyLoss(weight=w)
+    sch  = optim.lr_scheduler.CosineAnnealingLR(opt, T_max=epochs)
+>>>>>>> REPLACE
+</DIFF>

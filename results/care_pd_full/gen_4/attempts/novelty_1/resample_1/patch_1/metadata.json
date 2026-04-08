@@ -1,0 +1,14 @@
+{
+  "generation": 4,
+  "novelty_attempt": 1,
+  "resample_attempt": 1,
+  "patch_attempt": 1,
+  "success": true,
+  "num_applied": 1,
+  "patch_name": "multiwindow_motionclip_with_handcrafted_gait_features",
+  "patch_description": "Key insights from analyzing the baseline:\n1. Class 2 (severe PD) gets F1=0.00 - the model never predicts it. This is the biggest issue.\n2. Single center-crop of 60 frames loses temporal information about gait variability.\n3. The MLP classifier with FocalLoss isn't handling the class imbalance well enough.\n\nNovel approach:\n1. Multi-window MotionCLIP features: Slide multiple 60-frame windows across each walk, extract 512-dim embeddings per window, then compute mean, std, min, max statistics across windows. This captures gait variability and consistency - key PD indicators.\n2. Handcrafted gait features: Extract physics-informed features including joint angular velocities, left-right asymmetry (critical PD marker), stride regularity via autocorrelation, and frequency-domain features from hip/knee joints.\n3. Combined feature vector fed to a gradient-boosted ensemble (XGBoost-style via sklearn) with strong class weighting, plus an MLP ensemble with aggressive oversampling of class 2.\n4. Explicit class-weight balancing with sqrt-inverse-frequency weighting and SMOTE-like oversampling of minority class during training.\n5. Temperature-scaled predictions with a bias toward class 2 to fix the zero-prediction problem.",
+  "error_msg": null,
+  "timestamp": "2026-04-06T12:42:43.295160",
+  "llm_cost": 0.282335,
+  "llm_model": null
+}

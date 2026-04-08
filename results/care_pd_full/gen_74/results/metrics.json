@@ -1,0 +1,71 @@
+{
+    "combined_score": 0.5968624949189966,
+    "public": {
+        "macro_f1": 0.5969,
+        "n_walks": 781,
+        "f1_class0_normal": 0.8022,
+        "f1_class1_mild": 0.5802,
+        "f1_class2_severe": 0.4082,
+        "per_fold_f1": {
+            "1": {
+                "macro_f1": 0.506,
+                "n_test_walks": 159,
+                "n_train_walks": 622
+            },
+            "2": {
+                "macro_f1": 0.4154,
+                "n_test_walks": 122,
+                "n_train_walks": 659
+            },
+            "3": {
+                "macro_f1": 0.5782,
+                "n_test_walks": 143,
+                "n_train_walks": 638
+            },
+            "4": {
+                "macro_f1": 0.5908,
+                "n_test_walks": 115,
+                "n_train_walks": 666
+            },
+            "5": {
+                "macro_f1": 0.393,
+                "n_test_walks": 135,
+                "n_train_walks": 646
+            },
+            "6": {
+                "macro_f1": 0.4882,
+                "n_test_walks": 107,
+                "n_train_walks": 674
+            }
+        },
+        "confusion_matrix": [
+            [
+                286,
+                47,
+                8
+            ],
+            [
+                53,
+                161,
+                62
+            ],
+            [
+                33,
+                71,
+                60
+            ]
+        ],
+        "label_dist": {
+            "1": 276,
+            "0": 341,
+            "2": 164
+        },
+        "pred_dist": {
+            "1": 279,
+            "0": 372,
+            "2": 130
+        },
+        "mpjpe_mm": "N/A",
+        "eval_time_s": 1108.09
+    }
+}

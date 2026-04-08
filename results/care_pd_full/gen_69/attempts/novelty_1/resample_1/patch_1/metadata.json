@@ -1,0 +1,14 @@
+{
+  "generation": 69,
+  "novelty_attempt": 1,
+  "resample_attempt": 1,
+  "patch_attempt": 1,
+  "success": true,
+  "num_applied": 1,
+  "patch_name": "gait_ensemble_pro",
+  "patch_description": "This implementation combines the best elements from the three input programs, focusing on maximizing macro-F1 by improving severe PD classification. Key improvements:\n\n1. Uses the complete feature set from the winning architecture (6356 score) with all 1389-dim features including jerk, trunk sway, and cross-joint coupling metrics specifically designed to improve severe PD classification.\n\n2. Implements the proven RF+GB soft-voting ensemble instead of the less effective GBC+SVC ensemble, maintaining the exact parameters (RF 300 trees, GB 200 trees) that achieved the best results.\n\n3. Incorporates MotionCLIP integration as an optional enhancement, but defaults to the pure handcrafted feature approach which has proven more reliable, reducing computation time.\n\n4. Preserves the exact feature extraction and ensemble training code from the best-performing implementation, avoiding modifications that could degrade performance.\n\n5. Addresses the severe class under-prediction bottleneck by including specific features targeting severe PD: pelvis lateral rotation variance (trunk sway), jerk features, and pelvis-ankle coupling metrics.",
+  "error_msg": null,
+  "timestamp": "2026-04-06T21:27:02.023773",
+  "llm_cost": 0.01410337,
+  "llm_model": null
+}

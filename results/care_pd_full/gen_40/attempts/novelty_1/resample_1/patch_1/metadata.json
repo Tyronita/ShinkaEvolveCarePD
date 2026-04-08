@@ -1,0 +1,14 @@
+{
+  "generation": 40,
+  "novelty_attempt": 1,
+  "resample_attempt": 1,
+  "patch_attempt": 1,
+  "success": true,
+  "num_applied": 1,
+  "patch_name": "gait_ensemble_plus",
+  "patch_description": "The current program achieves a macro-F1 of 0.64 but struggles with class 2 (severe PD) classification (F1=0.47). The dominant error mode is misclassifying severe cases as mild (58 cases) or normal (40 cases). To address this, I propose enhancing the handcrafted gait features with three new PD-specific biomarkers targeting the mild/severe boundary:\n\n1. Trunk sway: Extract lateral trunk oscillation from spine joints (3,6,9,12) by computing the std of lateral (x-axis) rotation across frames as a sway amplitude proxy.\n\n2. Step-length variability: Compute the coefficient of variation (CV = std/mean) of ankle joint vertical oscillation amplitude across strides as a step-length irregularity proxy.\n\n3. Cadence instability: Split the sequence into 4 segments, compute FFT peak frequency in each, and take the std across segments as a measure of gait rhythm instability.\n\nThese features directly target clinical markers that distinguish mild from severe UPDRS scores. The enhanced feature vector is fed into a weighted ensemble of Random Forest and Gradient Boosting classifiers with proper class weighting. MotionCLIP features are used only as optional augmentation to avoid overfitting on small datasets.\n\nThe implementation fixes the critical bug of not applying class weights in the ensemble classifier and adds robust handling of edge cases (short sequences, NaN values). The feature extraction is optimized for efficiency while maintaining clinical relevance.",
+  "error_msg": null,
+  "timestamp": "2026-04-06T17:37:58.297984",
+  "llm_cost": 0.0027437800000000004,
+  "llm_model": null
+}

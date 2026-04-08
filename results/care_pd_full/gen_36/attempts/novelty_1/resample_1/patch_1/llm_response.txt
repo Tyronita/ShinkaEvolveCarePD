@@ -1,0 +1,361 @@
+<NAME>
+hybrid_features_sklearn_ensemble
+</NAME>
+
+<DESCRIPTION>
+The current program relies solely on MotionCLIP features with an MLP classifier, achieving only 0.40 macro-F1 - significantly below the RandomForest baseline of 0.565. Analysis of prior programs shows that handcrafted gait features with sklearn classifiers (0.62-0.64 macro-F1) substantially outperform MotionCLIP-only approaches.
+
+The key insight is that frozen MotionCLIP features, while rich, were pretrained on general human motions, not PD-specific gait patterns. Handcrafted features explicitly capture PD-relevant biomarkers: asymmetry, stride frequency, regularity, and joint range of motion.
+
+This edit replaces the entire architecture with a hybrid approach:
+1. Extract comprehensive handcrafted gait features as the primary signal
+2. Extract MotionCLIP features only if checkpoint available
+3. Concatenate both feature sets when possible
+4. Use a sklearn voting ensemble (RandomForest + GradientBoosting) with proper class weighting
+
+Critical fixes:
+- Replace FocalLoss with CrossEntropyLoss(weight=w) using per-class weights
+- Use mean pooling instead of random attention pooling for MotionCLIP
+- Make handcrafted features the default path (not fallback)
+- Add StandardScaler before classification
+- Handle class imbalance via class_weight='balanced'
+
+This approach directly addresses the 27% performance gap between MotionCLIP-only (0.41) and RandomForest (0.565) by leveraging domain-specific gait features as the foundation.
+</DESCRIPTION>
+
+<DIFF>
+<<<<<<< SEARCH
+# ── FocalLoss ────────────────────────────────────────────────────────────────
+# Inlined from CARE-PD learning/criterion.py
+# Better than CrossEntropyLoss for imbalanced UPDRS distribution {0:341,1:276,2:164}.
+# Mutable: alpha (down-weights easy examples), gamma (focusing strength).
+#          Try alpha=0.25/0.5, gamma=1.0/2.0/5.0. Or switch to WCE:
+#          nn.CrossEntropyLoss(weight=class_weights_tensor)
+
+class FocalLoss(nn.Module):
+    def __init__(self, alpha: float = 0.25, gamma: float = 2.0):
+        super().__init__()
+        self.alpha = alpha
+        self.gamma = gamma
+
+    def forward(self, logits: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
+        ce   = nn.functional.cross_entropy(logits, targets, reduction='none')
+        pt   = torch.exp(-ce)
+        return (self.alpha * (1 - pt) ** self.gamma * ce).mean()
+
+
+# ── Feature extraction ───────────────────────────────────────────────────────
+
+@torch.no_grad()
+def extract_features(encoder: nn.Module, poses: list) -> np.ndarray:
+    """
+    Extract MotionCLIP embeddings using multi-window attention pooling.
+
+    Strategy: slide 60-frame windows with 50% overlap → encode each → attention pooling.
+    Preserves temporal dynamics and captures multiple gait cycles.
+
+    Args:
+        encoder: frozen MotionCLIPEncoder on DEVICE
+        poses: list of (T_i, 72) float32 arrays
+    Returns:
+        (N, 512) numpy feature matrix
+    """
+    # Define window parameters
+    window_size = 60
+    hop_length = window_size // 2  # 50% overlap
+
+    # Attention pooling layer (shared across samples)
+    attention_pool = nn.Sequential(
+        nn.Linear(512, 64),
+        nn.Tanh(),
+        nn.Linear(64, 1)
+    ).to(DEVICE)
+    attention_pool.eval()  # No gradients - just for inference
+
+    embs = []
+    for pose in poses:
+        rot6d = smpl_to_6d(pose)  # (T, 25, 6)
+        T = rot6d.shape[0]
+
+        # Generate overlapping windows
+        if T <= window_size:
+            # Short sequence - use center crop
+            seq = crop_pad_frames(rot6d, n=window_size)
+            x = torch.from_numpy(seq).float().unsqueeze(0).to(DEVICE)
+            window_embs = encoder(x)  # (1, 512)
+        else:
+            # Extract overlapping windows
+            windows = []
+            for start_idx in range(0, T - window_size + 1, hop_length):
+                end_idx = start_idx + window_size
+                window = rot6d[start_idx:end_idx]
+                windows.append(window)
+            # Stack and encode all windows
+            x = torch.from_numpy(np.stack(windows)).float().to(DEVICE)  # (N_w, 60, 25, 6)
+            window_embs = encoder(x)  # (N_w, 512)
+
+            # Apply attention pooling
+            attn_weights = torch.softmax(attention_pool(window_embs), dim=0)  # (N_w, 1)
+            window_embs = (attn_weights * window_embs).sum(dim=0, keepdim=True)  # (1, 512)
+
+        embs.append(window_embs.cpu().numpy())
+
+    return np.vstack(embs)  # (N, 512)
+
+
+# ── Classifier head ──────────────────────────────────────────────────────────
+
+class ClassifierMLP(nn.Module):
+    """
+    Shallow MLP on top of frozen MotionCLIP embeddings.
+    Mutable: depth, width, dropout, activation, batch norm, residual connections.
+    """
+    def __init__(self, in_dim: int = 512, n_classes: int = 3, dropout: float = 0.3):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(in_dim, 256), nn.GELU(), nn.Dropout(dropout),
+            nn.Linear(256, 128),   nn.GELU(), nn.Dropout(0.2),
+            nn.Linear(128, n_classes),
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.net(x)
+
+
+def train_classifier(feat_train: np.ndarray, y_train: np.ndarray,
+                     feat_test:  np.ndarray,
+                     epochs: int = 150, lr: float = 1e-3) -> np.ndarray:
+    """
+    Train ClassifierMLP on precomputed MotionCLIP features.
+
+    Class weights computed from training label distribution to handle imbalance.
+    Uses FocalLoss + AdamW + cosine LR schedule.
+
+    Mutable: epochs, lr, batch_size, loss function, optimizer, schedule.
+    """
+    n_cls   = 3
+    counts  = np.bincount(y_train, minlength=n_cls).astype(float)
+    counts  = np.where(counts == 0, 1.0, counts)
+    # Class weights: inverse frequency, normalized
+    w       = torch.tensor(counts.sum() / (n_cls * counts), dtype=torch.float32).to(DEVICE)
+
+    clf  = ClassifierMLP(in_dim=feat_train.shape[1], n_classes=n_cls).to(DEVICE)
+    opt  = optim.AdamW(clf.parameters(), lr=lr, weight_decay=1e-3)
+    # Fixed: use the computed weights in CrossEntropyLoss
+    loss_fn = nn.CrossEntropyLoss(weight=w)
+    sch  = optim.lr_scheduler.CosineAnnealingLR(opt, T_max=epochs)
+
+    X_tr = torch.from_numpy(feat_train.astype(np.float32)).to(DEVICE)
+    y_tr = torch.tensor(y_train, dtype=torch.long).to(DEVICE)
+    X_te = torch.from_numpy(feat_test.astype(np.float32)).to(DEVICE)
+
+    N, bs = len(X_tr), 64
+    clf.train()
+    for _ in range(epochs):
+        perm = torch.randperm(N)
+        for s in range(0, N, bs):
+            b = perm[s:s + bs]
+            opt.zero_grad()
+            loss_fn(clf(X_tr[b]), y_tr[b]).backward()
+            opt.step()
+        sch.step()
+
+    clf.eval()
+    with torch.no_grad():
+        return clf(X_te).argmax(1).cpu().numpy()
+
+
+def train_and_predict(train_poses: list, y_train: np.ndarray,
+                      test_poses: list, care_pd_dir: str = None) -> np.ndarray:
+    """
+    Main prediction pipeline.
+
+    Path A (preferred): Frozen MotionCLIP → 512-dim embeddings → MLP classifier
+    Path B (fallback):  Mean+std of 6D rotation features → MLP classifier
+
+    Mutable: add fine-tuning path, multi-window aggregation, ensemble of paths.
+    """
+    enc = load_motionclip(care_pd_dir)
+
+    if enc is not None:
+        print(f'[genome] Path A: MotionCLIP frozen features → MLP  (device={DEVICE})', flush=True)
+        feat_tr = extract_features(enc, train_poses)   # (N_train, 512)
+        feat_te = extract_features(enc, test_poses)    # (N_test,  512)
+    else:
+        print(f'[genome] Path B: 6D rotation mean+std → MLP  (device={DEVICE})', flush=True)
+        def _fallback_feat(pose):
+            r = smpl_to_6d(pose).reshape(len(pose), -1)   # (T, 150)
+            return np.concatenate([r.mean(0), r.std(0)])   # (300,)
+        feat_tr = np.stack([_fallback_feat(p) for p in train_poses])
+        feat_te = np.stack([_fallback_feat(p) for p in test_poses])
+
+    return train_classifier(feat_tr, y_train, feat_te)
+=======
+# ── Comprehensive gait feature extraction ──────────────────────────────────
+# Extract physics-informed gait features that capture PD-relevant biomarkers
+
+def extract_gait_features(pose: np.ndarray) -> np.ndarray:
+    """
+    Extract comprehensive handcrafted gait features from SMPL pose sequence.
+    Designed specifically for PD severity classification.
+
+    Features include:
+    - Global rotation statistics (mean, std, range)
+    - Velocity and acceleration statistics
+    - Left-right asymmetry (hip, knee, ankle, foot)
+    - Stride frequency and rhythm via FFT
+    - Gait regularity via autocorrelation
+    - Freeze-of-gait proxy (high-freq power ratio)
+    - Per-joint velocity features for gait-relevant joints
+    - Sequence-level duration and kinematic features
+
+    Returns:
+        1D feature vector (1389,) capturing PD-relevant gait dynamics.
+    """
+    T = len(pose)
+    rot6d = smpl_to_6d(pose)  # (T, 25, 6)
+    flat = rot6d[:, :24, :].reshape(T, -1)  # (T, 144) - exclude translation
+
+    features = []
+
+    # 1. Global rotation statistics
+    features.append(flat.mean(0))   # (144,)
+    features.append(flat.std(0))    # (144,)
+    features.append(flat.max(0) - flat.min(0))  # range (144,)
+
+    # 2. Velocity statistics (first derivative)
+    if T > 1:
+        vel = np.diff(flat, axis=0)  # (T-1, 144)
+        features.append(vel.mean(0))     # (144,)
+        features.append(vel.std(0))      # (144,)
+        features.append(np.abs(vel).mean(0))  # mean absolute velocity
+    else:
+        features.extend([np.zeros(144)] * 3)
+
+    # 3. Acceleration statistics (second derivative)
+    if T > 2:
+        acc = np.diff(vel, axis=0)  # (T-2, 144)
+        features.append(acc.mean(0))     # (144,)
+        features.append(acc.std(0))      # (144,)
+        features.append(np.abs(acc).mean(0))  # jerkiness
+    else:
+        features.extend([np.zeros(144)] * 3)
+
+    # 4. Left-right asymmetry
+    asym_pairs = [(1,2), (4,5), (7,8), (10,11)]  # hip, knee, ankle, foot
+    for l_idx, r_idx in asym_pairs:
+        diff = rot6d[:, l_idx, :] - rot6d[:, r_idx, :]  # (T, 6)
+        features.append(diff.mean(0))   # (6,)
+        features.append(diff.std(0))    # (6,)
+
+    # 5. Velocity features for key gait joints
+    key_joints = [0, 1, 2, 4, 5, 7, 8, 10, 11]  # pelvis, hips, knees, ankles, feet
+    if T > 1:
+        joint_vel = np.diff(rot6d[:, :24, :], axis=0)  # (T-1, 24, 6)
+        for j in key_joints:
+            jv = joint_vel[:, j, :]  # (T-1, 6)
+            features.append(jv.mean(0))  # (6,)
+            features.append(jv.std(0))   # (6,)
+    else:
+        features.extend([np.zeros(6)] * 18)  # 9 joints × 2 stats
+
+    # 6. Frequency domain features from pelvis and ankle
+    freqs = np.fft.rfftfreq(T, d=1.0/30) if T > 1 else [0]
+    for j_idx in [0, 7, 8]:  # pelvis, L_ankle, R_ankle
+        for ch in range(3):  # first 3 components
+            if T <= 1:
+                features.extend([np.zeros(3)])
+                continue
+            sig = rot6d[:, j_idx, ch] - rot6d[:, j_idx, ch].mean()
+            fft_mag = np.abs(np.fft.rfft(sig))
+            gait_mask = (freqs >= 0.5) & (freqs <= 3.0)
+            hf_mask = freqs > 3.0
+
+            if gait_mask.any():
+                dominant_freq = freqs[gait_mask][np.argmax(fft_mag[gait_mask])]
+            else:
+                dominant_freq = 0.0
+
+            total_power = fft_mag.sum() + 1e-8
+            gait_power = fft_mag[gait_mask].sum() if gait_mask.any() else 0.0
+            hf_power = fft_mag[hf_mask].sum() if hf_mask.any() else 0.0
+
+            features.append(np.array([dominant_freq, gait_power/total_power, hf_power/total_power]))
+
+    # 7. Gait regularity from pelvis autocorrelation
+    if T > 1:
+        pelvis_ac = rot6d[:, 0, 0] - rot6d[:, 0, 0].mean()
+        ac = np.correlate(pelvis_ac, pelvis_ac, mode='full')
+        ac = ac[T-1:] / (ac[T-1] + 1e-8)
+        # Mean of first 30 lags
+        ac_mean = ac[1:min(31, len(ac))].mean() if len(ac) > 1 else 0.0
+        # Dominant period via first autocorrelation peak
+        peak_idx = np.argmax(ac[1:]) + 1 if len(ac) > 1 else 1
+        reg_features = np.array([ac_mean, peak_idx/30.0])  # regularity, stride_time
+    else:
+        reg_features = np.zeros(2)
+    features.append(reg_features)
+
+    # 8. Sequence-level features
+    duration = T / 30.0
+    step_features = np.array([duration, np.log1p(T)])
+    features.append(step_features)
+
+    return np.concatenate([f.ravel() for f in features])
+
+# ── MotionCLIP feature extraction ────────────────────────────────────────
+# Using simple mean pooling over windows — more stable than attention
+
+@torch.no_grad()
+def extract_motionclip_features(encoder: nn.Module, poses: list) -> np.ndarray:
+    """
+    Extract MotionCLIP embeddings using multi-window mean pooling.
+    More stable than attention pooling, and faster.
+    """
+    embs = []
+    for pose in poses:
+        rot6d = smpl_to_6d(pose)  # (T, 25, 6)
+        # Create fixed 60-frame windows with 30-frame step
+        windows = []
+        start_idx = 0
+        while start_idx <= len(rot6d) - 60:
+            windows.append(rot6d[start_idx:start_idx+60])
+            start_idx += 30
+        if len(windows) == 0:
+            # Pad short sequences symmetrically
+            pad_len = 60 - len(rot6d)
+            left = pad_len // 2
+            right = pad_len - left
+            windows.append(np.pad(rot6d, ((left, right), (0,0), (0,0)), mode='edge'))
+
+        # Encode all windows
+        x = torch.from_numpy(np.stack(windows)).float().to(DEVICE)  # (N_w, 60, 25, 6)
+        window_embs = encoder(x)  # (N_w, 512)
+        # Mean pool over windows
+        pooled_emb = window_embs.mean(0, keepdim=True).cpu().numpy()  # (1, 512)
+        embs.append(pooled_emb)
+
+    return np.vstack(embs)  # (N, 512)
+
+
+# ── Ensemble sklearn classifier ────────────────────────────────────────────
+# Proven superior on small tabular data with class imbalance
+
+def train_ensemble_classifier(X_train: np.ndarray, y_train: np.ndarray,
+                             X_test: np.ndarray) -> np.ndarray:
+    """
+    Train a voting classifier of Random Forest and Gradient Boosting.
+    Both use StandardScaler and handle class imbalance via class_weight.
+    This approach is more robust than neural networks for this dataset.
+    """
+    from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
+    from sklearn.ensemble import VotingClassifier
+    from sklearn.preprocessing import StandardScaler
+    from sklearn.pipeline import Pipeline
+
+    # Ensure all features are finite
+    X_train = np.nan_to_num(X_train, nan=0, posinf=0, neginf=0)
+    X_test = np.nan_to_num(X_test, nan=0, posinf=0, neginf=0)
+
+    # Compute class weights
+    n_cls

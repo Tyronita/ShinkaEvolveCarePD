@@ -1,0 +1,14 @@
+{
+  "generation": 42,
+  "novelty_attempt": 1,
+  "resample_attempt": 1,
+  "patch_attempt": 1,
+  "success": true,
+  "num_applied": 1,
+  "patch_name": "hybrid_sklearn_ensemble",
+  "patch_description": "This completely different approach replaces the deep learning pipeline with a hybrid handcrafted + MotionCLIP feature extraction followed by a sophisticated sklearn ensemble with proper class weighting. The key improvements are:\n\n1. Fixes the critical bug of unused class weights - now using class_weight='balanced' in all components\n2. Replaces FocalLoss and MLP with sklearn ensemble that properly handles class imbalance\n3. Uses handcrafted gait features based on clinical biomarkers (asymmetry, rhythm, ROM) \n4. Combines MotionCLIP embeddings with handcrafted features for complementary information\n5. Employs a VotingClassifier with GradientBoosting and SVC that are both class-weighted\n6. Applies proper feature scaling with StandardScaler\n\nThis approach leverages domain knowledge of PD gait characteristics while maintaining the representational power of MotionCLIP. The ensemble is specifically designed to handle the class imbalance (341:276:164) that was crippling the previous deep learning approach. By using sklearn estimators with built-in class_weight support, we ensure all classes are properly accounted for in training, particularly the important severe PD class (UPDRS=2).",
+  "error_msg": null,
+  "timestamp": "2026-04-06T17:22:38.162013",
+  "llm_cost": 0.0032201,
+  "llm_model": null
+}

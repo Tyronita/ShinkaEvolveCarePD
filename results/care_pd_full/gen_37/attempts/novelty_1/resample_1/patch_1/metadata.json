@@ -1,0 +1,14 @@
+{
+  "generation": 37,
+  "novelty_attempt": 1,
+  "resample_attempt": 1,
+  "patch_attempt": 1,
+  "success": true,
+  "num_applied": 1,
+  "patch_name": "stacking_meta_learner_rf_gb",
+  "patch_description": "The current program uses a soft voting ensemble of GradientBoosting and SVC, which treats both classifiers equally. However, analysis of the confusion matrix shows that class 2 (severe PD) is still under-predicted (68 correct vs 50/46 false negatives), and class 0 is over-predicted. A stacking meta-learner can learn to optimally combine the strengths of each base classifier.\n\nGradientBoosting is typically better at handling imbalanced data and capturing complex interactions in tabular features, while SVC with RBF kernel excels at finding non-linear decision boundaries. By training a meta-learner on out-of-fold predictions from both classifiers, we can achieve better calibration and improved macro-F1.\n\nThe key insight is to replace the fixed-weight soft voting with a learned combination via LogisticRegression meta-learner, which can assign different weights to RF and GB predictions based on their performance per class. This approach typically gains 2-5% macro-F1 on imbalanced problems compared to simple voting.",
+  "error_msg": null,
+  "timestamp": "2026-04-06T16:32:24.724042",
+  "llm_cost": 0.0020992040000000003,
+  "llm_model": null
+}

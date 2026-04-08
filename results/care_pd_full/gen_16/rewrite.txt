@@ -1,0 +1,11 @@
+# 2. Define the sklearn pipeline.
+    clf = Pipeline([
+        ('scaler', StandardScaler()),
+        ('svm', SVC(kernel='rbf', C=10, gamma='scale', class_weight='balanced',
+                    decision_function_shape='ovr'))
+    ])
+    # 3. Fit and predict.
+    clf.fit(feat_train, y_train)
+    y_pred = clf.predict(feat_test)
+
+    return y_pred

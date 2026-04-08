@@ -1,0 +1,14 @@
+{
+  "generation": 80,
+  "novelty_attempt": 1,
+  "resample_attempt": 1,
+  "patch_attempt": 1,
+  "success": true,
+  "num_applied": 1,
+  "patch_name": "calibrated_rf_gb_ensemble_v3",
+  "patch_description": "This crossover combines the best elements from all prior programs:\n\n1. **CalibratedClassifierCV on RF** (the #1 improvement per the description): Wraps the RF Pipeline with `CalibratedClassifierCV(rf_base, method='isotonic', cv=3)` which corrects RF's systematic underestimation of the severe minority class. This was responsible for the jump from 0.6356 \u2192 0.6551 in prior experiments.\n\n2. **RF hyperparameters**: n_estimators=500, min_samples_leaf=1 (from the best-performing program) rather than 300/2.\n\n3. **GB hyperparameters**: n_estimators=200, max_depth=4, learning_rate=0.05 (the proven baseline GB settings, not the slower lr=0.03/300 trees variant).\n\n4. **Class weights**: Standard inverse-frequency weights (not the 3\u00d7 severe boost which hurt mild class F1, not the 1.5\u00d7 boost). Pure inverse frequency lets calibration handle the bias correction.\n\n5. **Feature extraction**: The proven 1389-dim feature set from the current best program (with the exact features from the prompt). The extended feature sets with jerk/percentiles added overhead without clear benefit in the 0.61-scoring programs.\n\n6. **MotionCLIP integration**: Kept with try/except graceful fallback and multi-window mean pooling.\n\nThe key insight is that CalibratedClassifierCV + standard inverse-frequency weights + n_estimators=500/min_samples_leaf=1 is the proven winning combination. The crossover applies this to the current program's feature extraction.",
+  "error_msg": null,
+  "timestamp": "2026-04-06T23:11:40.957599",
+  "llm_cost": 0.25402199999999997,
+  "llm_model": null
+}

@@ -1,0 +1,36 @@
+**Assessing Prior Results**
+
+I'm now diving into the performance of Program 1, which achieved an overall score of 0.28. The core of my focus lies on the custom oversampling and weighted CrossEntropyLoss. Class 2 F1 was 0.26. I'm taking notes on its potential for improvement, so that this score will increase next time!
+
+
+**Evaluating Current Problems**
+
+I've been analyzing the previous programs' performances to pinpoint the weaknesses. Program 1's oversampling shows potential, even with its low Class 2 F1 of 0.26, and a poor overall F1 of 0.28. Program 2 and 3, which used `FocalLoss` without the required class weights, had Class 2 F1 of 0.00, demonstrating a critical failure. The loss function seems to be the core issue.
+
+
+**Reviewing the New Results**
+
+I've been examining the latest model which uses `CrossEntropyLoss` with weights, and it shows improvement with a 0.41 F1, but I'm looking closer at it. The Class 2 F1 is now 0.23, an improvement, but still poor, with low recall. Oversampling, which was also the prompt's recommendation, is my next focus to improve the overall F1.
+
+
+**Implementing New Architecture**
+
+I'm now fully committed to the new architecture. My plan involves replacing the existing PyTorch model with a pipeline of `StandardScaler`, and a robust `sklearn` classifier. I'll focus on crafting the `extract_gait_features` function to derive features such as statistics, velocity, asymmetry, and a FOG proxy, as the prompt advised. My goal is to build and evaluate the new model using this new feature engineering approach.
+
+
+**Implementing New Architecture**
+
+I'm now fully committed to a structural overhaul. I'm focusing on adopting Architecture A to extract handcrafted gait features. My revised strategy leverages a `sklearn.pipeline.Pipeline`, incorporating `StandardScaler` and `SVC` with 'balanced' class weights. This tackles the class imbalance directly. I'll meticulously craft the `extract_gait_features` function, calculating statistics, velocity, asymmetry, frequency, regularity, and a FOG proxy as advised. I'm streamlining the code by removing the complex PyTorch elements, and keeping only the essentials like rotation utilities.
+
+
+
+**Implementing the New Strategy**
+
+I'm now fully immersed in the refactor. My focus is entirely on Architecture A, and I've started coding `extract_gait_features`. I'm building a streamlined `sklearn.pipeline.Pipeline`, including `StandardScaler` and `SVC(class_weight='balanced')`. The plan is to complete feature extraction, replace the model, and then thoroughly evaluate this new setup using the current datasets and evaluation metrics.
+
+
+**Refining The Feature Extraction**
+
+I've been analyzing the new features to finalize the design of `extract_gait_features`. I'm focusing on velocity, asymmetry, regularity, and a FOG proxy, based on the prompt's recommendation. I'll integrate the new function into a pipeline with `StandardScaler` and `SVC` with balanced weights to optimize for performance. I'm aiming for a Class 2 F1 of 0.68+!
+
+

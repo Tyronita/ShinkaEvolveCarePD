@@ -1,0 +1,82 @@
+<NAME>
+calibrate_gb_ensemble
+</NAME>
+
+<DESCRIPTION>
+The current program uses a soft-voting ensemble of Random Forest and Gradient Boosting, but only the Random Forest is calibrated using `CalibratedClassifierCV`. This creates a significant imbalance in probability calibration quality between the two ensemble members. Gradient Boosting, while often better calibrated than RF, still produces miscalibrated probabilities on this specific imbalanced gait dataset, especially for the minority severe class (UPDRS=2). The uncalibrated GB predictions bias the soft-voting towards normal and mild classes, directly contributing to the low F1-score for severe PD.
+
+The solution is to apply identical isotonic calibration to the Gradient Boosting pipeline, just as is done for the Random Forest. This ensures both classifiers contribute well-calibrated probability estimates before averaging, which is critical for soft-voting to work effectively. This change targets the root cause of the severe class underprediction without modifying any features.
+
+This edit follows the critical implementation patterns: sklearn imports are moved inside the `train_ensemble_classifier` function body to prevent runtime failures, and the function already correctly handles NaN/Inf values and computes class weights from the training labels.
+</DESCRIPTION>
+
+<DIFF>
+<<<<<<< SEARCH
+    # Random Forest pipeline
+    rf = Pipeline([
+        ('scaler', StandardScaler()),
+        ('clf', RandomForestClassifier(
+            n_estimators=300,
+            max_depth=None,
+            min_samples_leaf=2,
+            class_weight=class_weights,
+            random_state=42,
+            n_jobs=-1
+        ))
+    ])
+
+    # Gradient Boosting pipeline
+    gb = Pipeline([
+        ('scaler', StandardScaler()),
+        ('clf', GradientBoostingClassifier(
+            n_estimators=200,
+            max_depth=4,
+            learning_rate=0.05,
+            subsample=0.8,
+            random_state=42
+        ))
+    ])
+
+    # Soft voting ensemble
+    ensemble = VotingClassifier(
+        estimators=[('rf', rf), ('gb', gb)],
+        voting='soft'
+    )
+=======
+    # Random Forest pipeline
+    rf_base = Pipeline([
+        ('scaler', StandardScaler()),
+        ('clf', RandomForestClassifier(
+            n_estimators=300,
+            max_depth=None,
+            min_samples_leaf=2,
+            class_weight=class_weights,
+            random_state=42,
+            n_jobs=-1
+        ))
+    ])
+    # Wrap RF with calibration
+    rf = CalibratedClassifierCV(rf_base, method='isotonic', cv=3)
+
+    # Gradient Boosting pipeline
+    gb_base = Pipeline([
+        ('scaler', StandardScaler()),
+        ('clf', GradientBoostingClassifier(
+            n_estimators=200,
+            max_depth=4,
+            learning_rate=0.05,
+            subsample=0.8,
+            random_state=42
+        ))
+    ])
+    # Wrap GB with identical calibration to ensure balanced probability contribution
+    gb = CalibratedClassifierCV(gb_base, method='isotonic', cv=3)
+
+    # Soft voting ensemble of two calibrated classifiers
+    ensemble = VotingClassifier(
+        estimators=[('rf', rf), ('gb', gb)],
+        voting='soft'
+    )
+>>>>>>> REPLACE
+
+</DIFF>

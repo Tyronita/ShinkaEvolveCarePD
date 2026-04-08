@@ -1,0 +1,14 @@
+{
+  "generation": 90,
+  "novelty_attempt": 1,
+  "resample_attempt": 1,
+  "patch_attempt": 1,
+  "success": true,
+  "num_applied": 1,
+  "patch_name": "calibrate_gb_ensemble",
+  "patch_description": "The current program uses a soft-voting ensemble of Random Forest and Gradient Boosting, but only the Random Forest is calibrated using `CalibratedClassifierCV`. This creates a significant imbalance in probability calibration quality between the two ensemble members. Gradient Boosting, while often better calibrated than RF, still produces miscalibrated probabilities on this specific imbalanced gait dataset, especially for the minority severe class (UPDRS=2). The uncalibrated GB predictions bias the soft-voting towards normal and mild classes, directly contributing to the low F1-score for severe PD.\n\nThe solution is to apply identical isotonic calibration to the Gradient Boosting pipeline, just as is done for the Random Forest. This ensures both classifiers contribute well-calibrated probability estimates before averaging, which is critical for soft-voting to work effectively. This change targets the root cause of the severe class underprediction without modifying any features.\n\nThis edit follows the critical implementation patterns: sklearn imports are moved inside the `train_ensemble_classifier` function body to prevent runtime failures, and the function already correctly handles NaN/Inf values and computes class weights from the training labels.",
+  "error_msg": null,
+  "timestamp": "2026-04-06T23:59:49.366968",
+  "llm_cost": 0.002209186,
+  "llm_model": null
+}

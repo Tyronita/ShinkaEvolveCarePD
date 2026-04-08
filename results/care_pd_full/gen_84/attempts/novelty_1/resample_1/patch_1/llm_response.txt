@@ -1,0 +1,92 @@
+<NAME>
+add_stride_fft_features
+</NAME>
+
+<DESCRIPTION>
+The current FFT-based gait rhythm features are computed on the entire sequence, which averages out within-walk temporal variations such as gait initiation instability, freezing-of-gait episodes, or cadence deterioration—phenomena more prevalent in moderate-to-severe PD (class 2). To better capture these dynamics, I propose extending the FFT feature extraction to operate on 4 non-overlapping temporal segments of the walk. This will allow the model to detect rhythm irregularities that are masked in whole-sequence FFT.
+
+Specifically, for pelvis (joint 0), left ankle (7), and right ankle (8), we compute FFT on each of the 4 segments for the first 3 rotation components (6D → 3 used). From each segment, we extract:
+- Dominant frequency in gait band (0.5–3.0 Hz)
+- Gait-band power ratio
+- High-frequency power ratio (>3.0 Hz)
+
+This yields 3 joints × 3 features × 4 segments = 36 dimensions. Additionally, we compute the std and linear trend across segments (3 joints × 3 features × 2 stats = 18 dims), capturing inter-segment variability and progression. Total new features: 54.
+
+These features directly target the poor performance in folds 1, 2, 5, and 6 (macro_F1 ≤ 0.48) where subject-level gait rhythm instability is a key confounder. By modeling stride-level cadence dynamics, the classifier gains discriminative power at the mild/severe boundary, where freezing and arrhythmia are clinical hallmarks.
+</DESCRIPTION>
+
+<DIFF>
+<<<<<<< SEARCH
+    # 6. Frequency domain features from pelvis and ankle
+    freqs = np.fft.rfftfreq(T, d=1.0/30) if T > 1 else [0]
+    for j_idx in [0, 7, 8]:  # pelvis, L_ankle, R_ankle
+        for ch in range(3):  # first 3 components
+            if T <= 1:
+                features.extend([np.zeros(3)])
+                continue
+            sig = rot6d[:, j_idx, ch] - rot6d[:, j_idx, ch].mean()
+            fft_mag = np.abs(np.fft.rfft(sig))
+            gait_mask = (freqs >= 0.5) & (freqs <= 3.0)
+            hf_mask = freqs > 3.0
+
+            if gait_mask.any():
+                dominant_freq = freqs[gait_mask][np.argmax(fft_mag[gait_mask])]
+            else:
+                dominant_freq = 0.0
+
+            total_power = fft_mag.sum() + 1e-8
+            gait_power = fft_mag[gait_mask].sum() if gait_mask.any() else 0.0
+            hf_power = fft_mag[hf_mask].sum() if hf_mask.any() else 0.0
+
+            features.append(np.array([dominant_freq, gait_power/total_power, hf_power/total_power]))
+=======
+    # 6. Frequency domain features from pelvis and ankle with temporal segmentation
+    if T > 1:
+        freqs = np.fft.rfftfreq(T, d=1.0/30)
+        n_segments = 4
+        seg_len = T // n_segments
+        segment_features = {j: {c: [] for c in range(3)} for j in [0, 7, 8]}
+        
+        for seg_idx in range(n_segments):
+            start_idx = seg_idx * seg_len
+            end_idx = start_idx + seg_len if seg_idx < n_segments - 1 else T
+            seg_signal = rot6d[start_idx:end_idx]
+            
+            for j_idx in [0, 7, 8]:
+                for ch in range(3):
+                    sig = seg_signal[:, j_idx, ch] - seg_signal[:, j_idx, ch].mean()
+                    if len(sig) == 0:
+                        segment_features[j_idx][ch].append(np.array([0.0, 0.0, 0.0]))
+                        continue
+                    fft_mag = np.abs(np.fft.rfft(sig))
+                    gait_mask = (freqs >= 0.5) & (freqs <= 3.0)
+                    hf_mask = freqs > 3.0
+
+                    if gait_mask.any():
+                        dominant_freq = freqs[gait_mask][np.argmax(fft_mag[gait_mask])]
+                    else:
+                        dominant_freq = 0.0
+
+                    total_power = fft_mag.sum() + 1e-8
+                    gait_power = fft_mag[gait_mask].sum() if gait_mask.any() else 0.0
+                    hf_power = fft_mag[hf_mask].sum() if hf_mask.any() else 0.0
+
+                    segment_features[j_idx][ch].append(np.array([dominant_freq, gait_power/total_power, hf_power/total_power]))
+        
+        # Now aggregate across segments: add std and linear trend
+        for j_idx in [0, 7, 8]:
+            for ch in range(3):
+                seg_vals = np.array(segment_features[j_idx][ch])  # (4, 3)
+                features.append(seg_vals.mean(axis=0))  # mean across segments
+                features.append(seg_vals.std(axis=0))   # variability across segments
+                if n_segments > 1:
+                    # Linear trend (slope) across segments for each feature
+                    slopes = np.polyfit(range(n_segments), seg_vals, 1)[0]
+                    features.append(slopes)
+                else:
+                    features.append(np.zeros(3))
+    else:
+        # Fallback: 3 joints × 3 stats (mean, std, trend) × 3 features = 27 dims
+        features.extend([np.zeros(3)] * 27)
+>>>>>>> REPLACE
+</DIFF>

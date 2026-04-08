@@ -1,0 +1,14 @@
+{
+  "generation": 74,
+  "novelty_attempt": 1,
+  "resample_attempt": 1,
+  "patch_attempt": 1,
+  "success": true,
+  "num_applied": 1,
+  "patch_name": "add_severe_pd_discriminative_features",
+  "patch_description": "The current model under-predicts severe PD cases (115 predicted vs 164 actual), with 98 severe cases misclassified as normal or mild. To address this, we add three new features specifically designed to capture severe PD gait pathology:\n\n1. **Trunk sway**: Severe PD patients exhibit increased postural instability and lateral trunk sway. We add pelvis lateral rotation variance and mean absolute value.\n2. **Jerk metrics**: PD gait becomes more irregular and fragmented in severe stages. We add mean absolute jerk and jerk std for pelvis, hips, and ankles.\n3. **Cross-joint coupling**: Impaired inter-limb coordination is a hallmark of severe PD. We add cross-correlation between pelvis and ankle rotational signals.\n\nThese features directly target the primary failure mode (severe class under-prediction) and are computationally efficient. They build upon the proven 1389-dim feature set that achieved 0.6356 macro-F1, extending it to better discriminate severe cases.",
+  "error_msg": null,
+  "timestamp": "2026-04-06T21:59:21.351865",
+  "llm_cost": 0.00659468,
+  "llm_model": null
+}

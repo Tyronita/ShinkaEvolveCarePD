@@ -1,0 +1,14 @@
+{
+  "generation": 70,
+  "novelty_attempt": 1,
+  "resample_attempt": 1,
+  "patch_attempt": 1,
+  "success": true,
+  "num_applied": 6,
+  "patch_name": "add_jerk_features_for_severe_pd",
+  "patch_description": "The current bottleneck is the severe PD class (class 2) with F1=0.52. The confusion matrix shows 56 normal\u2192severe and 34 mild\u2192severe misclassifications, indicating the classifier struggles to distinguish severe from milder forms. \n\nJerk (3rd derivative of rotation) captures movement smoothness and is a key biomarker in severe PD where movements become fragmented and dyskinetic. Adding jerk statistics as features will provide discriminative power for the severe class.\n\nWe extend the feature extraction to include:\n1. Jerk (3rd derivative) statistics: mean, std, and abs_mean of acceleration differences\n2. These features are added in a new section after acceleration statistics\n3. The features are computed only when T>3 to ensure valid derivatives\n\nThis change targets the primary bottleneck by adding neurologically meaningful features that quantify the loss of movement smoothness in advanced PD.",
+  "error_msg": null,
+  "timestamp": "2026-04-06T21:37:41.896200",
+  "llm_cost": 0.0023487530000000003,
+  "llm_model": null
+}

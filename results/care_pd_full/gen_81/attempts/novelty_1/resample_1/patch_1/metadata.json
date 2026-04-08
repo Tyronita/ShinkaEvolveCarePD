@@ -1,0 +1,14 @@
+{
+  "generation": 81,
+  "novelty_attempt": 1,
+  "resample_attempt": 1,
+  "patch_attempt": 1,
+  "success": true,
+  "num_applied": 1,
+  "patch_name": "calibrated_rf_gb_ensemble_v3",
+  "patch_description": "Inspired by the top-performing programs achieving 0.6551 macro-F1, I identified the key differentiator: probability calibration of the Random Forest classifier using CalibratedClassifierCV with isotonic regression. The previous program (score=0.58) used uncalibrated RF/GB/XGBoost, which systematically under-predicts the severe class (F1=0.40). The calibration insight is critical: RF probability estimates are poorly calibrated for minority classes, and isotonic regression non-parametrically corrects this bias, directly improving severe class F1 from 0.47 to 0.52 in prior experiments.\n\nMy novel approach implements the proven 0.6551 architecture with three key improvements: (1) Wrapping the RF pipeline with CalibratedClassifierCV(method='isotonic', cv=3) as the single most impactful change; (2) Using the exact RF hyperparameters (n_estimators=500, min_samples_leaf=1) that produced optimal probability estimates for calibration; (3) Maintaining the successful soft-voting ensemble of calibrated RF + GB while removing the unstable XGBoost component. I preserve the robust handcrafted gait features and MotionCLIP integration with graceful fallback, but prioritize the calibration pattern proven to add +0.02 macro-F1. This directly addresses the severe class under-prediction bottleneck by ensuring the ensemble's soft voting uses properly calibrated probabilities.",
+  "error_msg": null,
+  "timestamp": "2026-04-06T23:12:19.357059",
+  "llm_cost": 0.0064227,
+  "llm_model": null
+}

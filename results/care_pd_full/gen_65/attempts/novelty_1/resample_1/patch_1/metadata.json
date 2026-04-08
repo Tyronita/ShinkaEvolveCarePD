@@ -1,0 +1,14 @@
+{
+  "generation": 65,
+  "novelty_attempt": 1,
+  "resample_attempt": 1,
+  "patch_attempt": 1,
+  "success": true,
+  "num_applied": 2,
+  "patch_name": "increase_rf_trees_and_calibrate",
+  "patch_description": "The current ensemble uses a RandomForest with 300 trees and min_samples_leaf=2, which may not be sufficient to capture the subtle gait patterns in the severe PD class (only 164 samples). Increasing to 500 trees with min_samples_leaf=1 allows the model to form more granular decision boundaries, especially important for distinguishing mild vs severe PD. Additionally, the predicted distribution (115 severe) underestimates the true label count (164), indicating poor calibration. By wrapping the RF in CalibratedClassifierCV with isotonic regression, we correct this miscalibration, which is critical for the soft-voting ensemble's probability estimates. This change keeps all other proven components (GB, soft voting, class weights, MotionCLIP fusion) intact while directly addressing the underperformance on class 2 (F1=0.47) by improving both model resolution and probability accuracy.",
+  "error_msg": null,
+  "timestamp": "2026-04-06T20:34:57.351721",
+  "llm_cost": 0.001997,
+  "llm_model": null
+}

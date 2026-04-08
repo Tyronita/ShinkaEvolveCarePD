@@ -1,0 +1,70 @@
+<NAME>
+hybrid_features_sklearn_ensemble
+</NAME>
+
+<DESCRIPTION>
+The current program achieves 0.63 macro-F1 by combining MotionCLIP features with handcrafted gait features and using a sklearn VotingClassifier. However, the RandomForest baseline achieves 0.565, meaning our approach is only 6.5% better, while the MotionCLIP-only approach was 27% worse than baseline. This suggests we're on the right track but can improve further.
+
+The key insight is that instead of simple voting, we should use a stacking ensemble with a meta-learner that learns optimal weights for each base classifier based on their performance on out-of-fold predictions. This allows the model to learn when to trust which classifier, improving overall performance.
+
+We'll implement a 5-fold internal cross-validation within each training fold to generate out-of-fold predictions from GradientBoosting and SVC separately, then train a LogisticRegression meta-learner on these predictions. This stacking approach typically outperforms simple voting by 2-5% macro-F1 on imbalanced problems.
+</DESCRIPTION>
+
+<DIFF>
+<<<<<<< SEARCH
+    # Create ensemble with class_weight='balanced'
+    clf = Pipeline([
+        ('scaler', StandardScaler()),
+        ('ensemble', VotingClassifier([
+            ('gbc', GradientBoostingClassifier(n_estimators=100, random_state=42)),
+            ('svc', SVC(kernel='rbf', C=10, gamma='scale', class_weight='balanced', probability=True))
+        ], voting='soft'))
+    ])
+
+    # Fit and predict
+    clf.fit(X_tr, y_train)
+    return clf.predict(X_te)
+=======
+    # Create stacking ensemble with meta-learner
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.model_selection import StratifiedKFold
+
+    # Base classifiers
+    gbc = GradientBoostingClassifier(n_estimators=100, random_state=42)
+    svc = SVC(kernel='rbf', C=10, gamma='scale', class_weight='balanced', probability=True)
+
+    # Standardize features
+    scaler = StandardScaler()
+    X_tr_scaled = scaler.fit_transform(X_tr)
+    X_te_scaled = scaler.transform(X_te)
+
+    # Generate out-of-fold predictions for training set
+    n_folds = 5
+    skf = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=42)
+    gbc_oof = np.zeros((X_tr.shape[0], 3))
+    svc_oof = np.zeros((X_tr.shape[0], 3))
+
+    for train_idx, val_idx in skf.split(X_tr_scaled, y_train):
+        # Train on fold
+        X_tr_fold, y_tr_fold = X_tr_scaled[train_idx], y_train[train_idx]
+        X_val_fold = X_tr_scaled[val_idx]
+
+        # Predict on validation fold
+        gbc.fit(X_tr_fold, y_tr_fold)
+        svc.fit(X_tr_fold, y_tr_fold)
+        gbc_oof[val_idx] = gbc.predict_proba(X_val_fold)
+        svc_oof[val_idx] = svc.predict_proba(X_val_fold)
+
+    # Train meta-learner on out-of-fold predictions
+    X_meta_train = np.hstack([gbc_oof, svc_oof])
+    meta_learner = LogisticRegression(C=1.0, class_weight='balanced', max_iter=1000, random_state=42)
+    meta_learner.fit(X_meta_train, y_train)
+
+    # Make predictions on test set
+    gbc_pred = gbc.fit(X_tr_scaled, y_train).predict_proba(X_te_scaled)
+    svc_pred = svc.fit(X_tr_scaled, y_train).predict_proba(X_te_scaled)
+    X_meta_test = np.hstack([gbc_pred, svc_pred])
+
+    return meta_learner.predict(X_meta_test)
+>>>>>>> REPLACE
+</DIFF>

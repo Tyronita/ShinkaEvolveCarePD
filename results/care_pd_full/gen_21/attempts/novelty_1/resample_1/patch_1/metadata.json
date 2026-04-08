@@ -1,0 +1,14 @@
+{
+  "generation": 21,
+  "novelty_attempt": 1,
+  "resample_attempt": 1,
+  "patch_attempt": 1,
+  "success": true,
+  "num_applied": 4,
+  "patch_name": "handcrafted_features_with_sklearn_ensemble",
+  "patch_description": "The MotionCLIP-based approach is underperforming significantly compared to the stated RandomForest baseline of 0.565. The issue is that MotionCLIP features are not specific to pathological gait patterns. \n\nThe new approach:\n1. Extract rich handcrafted PD-relevant gait features (velocity, asymmetry, rhythm, tremor, freeze-of-gait proxy)\n2. Use a proper sklearn ensemble (RandomForest + GradientBoosting + SVM) with voting\n3. Use SMOTE-like oversampling for class 2 to address severe imbalance\n4. Also concatenate MotionCLIP features when available (hybrid approach)\n\nThis is inspired by the fact that the baseline RF gets 0.565 with simpler features, and that clinical PD gait assessment specifically looks at asymmetry, cadence, stride length (velocity), and freezing episodes - all extractable from SMPL pose sequences.",
+  "error_msg": null,
+  "timestamp": "2026-04-06T15:05:14.162312",
+  "llm_cost": 0.181809,
+  "llm_model": null
+}

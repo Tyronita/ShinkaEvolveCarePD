@@ -1,0 +1,126 @@
+<NAME>
+calibrated_rf_gb_ensemble_v3
+</NAME>
+
+<DESCRIPTION>
+The current program achieves macro-F1=0.60 with severe class F1=0.42, indicating poor calibration of probability estimates for the minority severe class. The top-performing programs (score=0.6551) show that wrapping the RandomForest pipeline with CalibratedClassifierCV using isotonic regression is the single most impactful improvement, boosting severe F1 from 0.47 to 0.52.
+
+The key insight is that RandomForest probability estimates are systematically biased for minority classes. Isotonic regression corrects these probabilities non-parametrically, allowing the soft-voting ensemble to properly weight severe class predictions. This must be applied to the RF pipeline before ensemble combination.
+
+We will modify the train_and_predict function to:
+1. Import CalibratedClassifierCV
+2. Wrap the RF pipeline with calibration using method='isotonic' and cv=3
+3. Maintain the existing GB pipeline without calibration (GB probabilities are already well-calibrated)
+4. Use soft voting with calibrated RF probabilities
+
+This change directly addresses the severe class under-prediction (pred_dist shows 157 vs actual 164) and aligns with the proven best practices from the top-performing programs.
+</DESCRIPTION>
+
+<DIFF>
+<<<<<<< SEARCH
+def train_and_predict(train_poses: list, y_train: np.ndarray,
+                      test_poses: list, care_pd_dir: str = None) -> np.ndarray:
+    """
+    Main prediction pipeline.
+    
+    Primary: Handcrafted gait features → RF + GBC weighted ensemble
+    Optional augmentation: MotionCLIP embeddings concatenated if available
+    
+    Uses proper inverse-frequency class weights in sklearn classifiers.
+    """
+    from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier, VotingClassifier
+    from sklearn.preprocessing import StandardScaler
+    from sklearn.pipeline import Pipeline
+=======
+def train_and_predict(train_poses: list, y_train: np.ndarray,
+                      test_poses: list, care_pd_dir: str = None) -> np.ndarray:
+    """
+    Main prediction pipeline.
+    
+    Primary: Handcrafted gait features → Calibrated RF + GBC ensemble
+    Optional augmentation: MotionCLIP embeddings concatenated if available
+    
+    Uses probability calibration (isotonic) on RF to improve severe class recall.
+    """
+    from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier, VotingClassifier
+    from sklearn.preprocessing import StandardScaler
+    from sklearn.pipeline import Pipeline
+    from sklearn.calibration import CalibratedClassifierCV
+>>>>>>> REPLACE
+</DIFF>
+
+<DIFF>
+<<<<<<< SEARCH
+    # Build weighted ensemble: RF (class_weight) + GBC (sample_weight via fit_params)
+    rf = Pipeline([
+        ('scaler', StandardScaler()),
+        ('clf', RandomForestClassifier(
+            n_estimators=300,
+            max_depth=None,
+            min_samples_leaf=1,
+            class_weight=class_weight,
+            random_state=42,
+            n_jobs=-1
+        ))
+    ])
+=======
+    # Build weighted ensemble: Calibrated RF (class_weight) + GBC (sample_weight via fit_params)
+    # Calibrate RF probabilities to improve severe class prediction (isotonic corrects minority class bias)
+    rf_base = Pipeline([
+        ('scaler', StandardScaler()),
+        ('clf', RandomForestClassifier(
+            n_estimators=500,
+            max_depth=None,
+            min_samples_leaf=1,
+            class_weight=class_weight,
+            random_state=42,
+            n_jobs=-1
+        ))
+    ])
+    rf = CalibratedClassifierCV(rf_base, method='isotonic', cv=3)
+>>>>>>> REPLACE
+</DIFF>
+
+<DIFF>
+<<<<<<< SEARCH
+    # Fit RF with class_weight already set
+    print('[genome] Fitting RandomForest...', flush=True)
+    rf.fit(X_tr, y_train)
+
+    # Fit GBC with sample_weight to handle class imbalance
+    print('[genome] Fitting GradientBoosting...', flush=True)
+    # GBC in pipeline: pass sample_weight via fit_params
+    gb.fit(X_tr, y_train, clf__sample_weight=sample_weight)
+
+    # Soft voting ensemble
+    print('[genome] Running soft voting ensemble...', flush=True)
+    rf_proba = rf.predict_proba(X_te)  # (N, 3)
+    gb_proba = gb.predict_proba(X_te)  # (N, 3)
+    
+    # Weighted average: RF and GBC equally weighted
+    avg_proba = 0.5 * rf_proba + 0.5 * gb_proba
+    preds = np.argmax(avg_proba, axis=1)
+    
+    return preds
+=======
+    # Fit GBC with sample_weight to handle class imbalance
+    print('[genome] Fitting GradientBoosting...', flush=True)
+    # GBC in pipeline: pass sample_weight via fit_params
+    gb.fit(X_tr, y_train, clf__sample_weight=sample_weight)
+
+    # Fit Calibrated RF
+    print('[genome] Fitting Calibrated RandomForest...', flush=True)
+    rf.fit(X_tr, y_train)
+
+    # Soft voting ensemble with calibrated probabilities
+    print('[genome] Running soft voting ensemble with calibrated RF...', flush=True)
+    rf_proba = rf.predict_proba(X_te)  # (N, 3) - now properly calibrated
+    gb_proba = gb.predict_proba(X_te)  # (N, 3)
+    
+    # Weighted average: Calibrated RF and GBC equally weighted
+    avg_proba = 0.5 * rf_proba + 0.5 * gb_proba
+    preds = np.argmax(avg_proba, axis=1)
+    
+    return preds
+>>>>>>> REPLACE
+</DIFF>

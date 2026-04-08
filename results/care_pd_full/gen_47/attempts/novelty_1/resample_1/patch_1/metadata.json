@@ -1,0 +1,14 @@
+{
+  "generation": 47,
+  "novelty_attempt": 1,
+  "resample_attempt": 1,
+  "patch_attempt": 1,
+  "success": true,
+  "num_applied": 1,
+  "patch_name": "add_per_subject_normalization",
+  "patch_description": "The current model exhibits high fold variance (0.42 to 0.56 macro-F1), indicating significant subject-level distribution shift. To address this, we introduce per-subject feature normalization: for each subject in the training set, we compute the mean and standard deviation of their walk-level features and use these to z-score normalize all their walks. During testing, we apply the same normalization using training-set statistics. This creates a dual-path feature representation: the raw features preserve absolute gait characteristics, while the normalized features highlight deviations from the subject's baseline, which is clinically relevant for PD progression. We double the feature vector by concatenating raw and normalized features, allowing the classifier to learn both population-level and individual-level patterns. This approach directly targets the severe class (class 2) by amplifying subtle deterioration signals within a subject's gait over time.",
+  "error_msg": null,
+  "timestamp": "2026-04-06T17:45:45.652397",
+  "llm_cost": 0.0030101999999999998,
+  "llm_model": null
+}

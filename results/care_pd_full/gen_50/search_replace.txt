@@ -1,0 +1,89 @@
+<NAME>
+tune_class_weights_and_rf_params
+</NAME>
+
+<DESCRIPTION>
+The current confusion matrix shows 40 severe→normal and 58 severe→mild misclassifications — the primary bottleneck is poor recall for class 2 (severe PD), which has the lowest F1 (0.47). The current class weighting `{i: counts.sum() / (n_cls * counts[i])}` gives class 2 a weight of ~1.58×, but this is insufficient.
+
+We address this by:
+1. Increasing the class 2 weight by 1.5× multiplicative factor to prioritize severe case detection.
+2. Tuning RandomForest to reduce over-smoothing: `min_samples_leaf=1` preserves fine-grained gait patterns in severe gait freezing, and `max_features='sqrt'` increases ensemble diversity.
+3. Boosting GB capacity: more estimators (300), lower learning rate (0.03), shallower trees (max_depth=3) prevent early overfitting.
+
+These changes maintain the proven handcrafted + ensemble architecture while focusing model attention on the most clinically critical and hardest-to-predict class. This strategy directly targets the observed misclassification pattern.
+</DESCRIPTION>
+
+<DIFF>
+<<<<<<< SEARCH
+    # Compute class weights
+    n_cls = 3
+    counts = np.bincount(y_train, minlength=n_cls).astype(float)
+    class_weights = {i: 1.0 for i in range(n_cls)}
+    if counts.min() > 0:
+        class_weights = {i: counts.sum() / (n_cls * counts[i]) for i in range(n_cls)}
+
+    # Random Forest pipeline
+    rf = Pipeline([
+        ('scaler', StandardScaler()),
+        ('clf', RandomForestClassifier(
+            n_estimators=300,
+            max_depth=None,
+            min_samples_leaf=2,
+            class_weight=class_weights,
+            random_state=42,
+            n_jobs=-1
+        ))
+    ])
+
+    # Gradient Boosting pipeline
+    gb = Pipeline([
+        ('scaler', StandardScaler()),
+        ('clf', GradientBoostingClassifier(
+            n_estimators=200,
+            max_depth=4,
+            learning_rate=0.05,
+            subsample=0.8,
+            random_state=42
+        ))
+    ])
+=======
+    # Compute class weights with boosted emphasis on severe (class 2)
+    n_cls = 3
+    counts = np.bincount(y_train, minlength=n_cls).astype(float)
+    class_weights = {i: 1.0 for i in range(n_cls)}
+    if counts.min() > 0:
+        base_weights = {i: counts.sum() / (n_cls * counts[i]) for i in range(n_cls)}
+        # Increase weight for severe class (2) by 1.5× to improve recall
+        class_weights = {
+            0: base_weights[0],
+            1: base_weights[1],
+            2: 1.5 * base_weights[2]
+        }
+
+    # Random Forest pipeline — tuned for severe class sensitivity
+    rf = Pipeline([
+        ('scaler', StandardScaler()),
+        ('clf', RandomForestClassifier(
+            n_estimators=500,
+            max_depth=None,
+            min_samples_leaf=1,        # capture fine-grained severe gait patterns
+            class_weight=class_weights,
+            max_features='sqrt',       # increase diversity
+            random_state=42,
+            n_jobs=-1
+        ))
+    ])
+
+    # Gradient Boosting pipeline — higher capacity, lower LR
+    gb = Pipeline([
+        ('scaler', StandardScaler()),
+        ('clf', GradientBoostingClassifier(
+            n_estimators=300,          # more trees
+            max_depth=3,               # reduce overfitting
+            learning_rate=0.03,        # lower LR for stability
+            subsample=0.8,
+            random_state=42
+        ))
+    ])
+>>>>>>> REPLACE
+</DIFF>

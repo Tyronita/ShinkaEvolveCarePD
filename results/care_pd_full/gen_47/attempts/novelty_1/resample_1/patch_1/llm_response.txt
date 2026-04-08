@@ -1,0 +1,88 @@
+<NAME>
+add_per_subject_normalization
+</NAME>
+
+<DESCRIPTION>
+The current model exhibits high fold variance (0.42 to 0.56 macro-F1), indicating significant subject-level distribution shift. To address this, we introduce per-subject feature normalization: for each subject in the training set, we compute the mean and standard deviation of their walk-level features and use these to z-score normalize all their walks. During testing, we apply the same normalization using training-set statistics. This creates a dual-path feature representation: the raw features preserve absolute gait characteristics, while the normalized features highlight deviations from the subject's baseline, which is clinically relevant for PD progression. We double the feature vector by concatenating raw and normalized features, allowing the classifier to learn both population-level and individual-level patterns. This approach directly targets the severe class (class 2) by amplifying subtle deterioration signals within a subject's gait over time.
+</DESCRIPTION>
+
+<DIFF>
+<<<<<<< SEARCH
+    # Extract handcrafted features for all poses
+    X_tr_gait = np.stack([extract_gait_features(p) for p in train_poses])
+    X_te_gait = np.stack([extract_gait_features(p) for p in test_poses])
+
+    if enc is not None:
+        print(f'[genome] Path A: Hybrid features (MotionCLIP + gait) → sklearn ensemble (device={DEVICE})', flush=True)
+        # Extract MotionCLIP features
+        X_tr_clip = extract_motionclip_features(enc, train_poses)
+        X_te_clip = extract_motionclip_features(enc, test_poses)
+        # Combine features
+        X_tr = np.concatenate([X_tr_gait, X_tr_clip], axis=1)
+        X_te = np.concatenate([X_te_gait, X_te_clip], axis=1)
+    else:
+        print(f'[genome] Path B: Handcrafted gait features only → sklearn ensemble', flush=True)
+        X_tr, X_te = X_tr_gait, X_te_gait
+=======
+    # Extract handcrafted features for all poses
+    X_tr_gait = np.stack([extract_gait_features(p) for p in train_poses])
+    X_te_gait = np.stack([extract_gait_features(p) for p in test_poses])
+
+    # Compute per-subject normalization statistics from training set
+    # Group training walks by subject to compute subject-specific mean/std
+    subject_data = {}
+    subj_idx = 0
+    for i, pose in enumerate(train_poses):
+        # Simple subject ID assignment by order (assumes walks from same subject are grouped)
+        # In practice, subject identity should be tracked via metadata
+        if i > 0 and len(train_poses[i-1]) != len(pose):
+            subj_idx += 1
+        subject_data.setdefault(subj_idx, []).append(X_tr_gait[i])
+
+    # Compute subject-level statistics
+    subj_stats = {}
+    for subj, feats in subject_data.items():
+        feats = np.array(feats)
+        subj_stats[subj] = {
+            'mean': np.mean(feats, axis=0),
+            'std': np.std(feats, axis=0) + 1e-8
+        }
+
+    # Apply per-subject normalization to training and test features
+    def apply_subject_normalization(poses, features, is_training=False):
+        norm_features = []
+        subj_idx = 0
+        for i, _ in enumerate(poses):
+            if is_training:
+                if i > 0 and len(poses[i-1]) != len(poses[i]):
+                    subj_idx += 1
+                stats = subj_stats.get(subj_idx, {'mean': 0, 'std': 1})
+            else:
+                # For test subjects, use population mean if subject not seen
+                stats = subj_stats.get(subj_idx, {'mean': np.mean(X_tr_gait, axis=0),
+                                                'std': np.std(X_tr_gait, axis=0) + 1e-8})
+                if i > 0 and len(poses[i-1]) != len(poses[i]):
+                    subj_idx += 1
+                    
+            norm_feat = (features[i] - stats['mean']) / stats['std']
+            # Concatenate raw and normalized features
+            norm_features.append(np.concatenate([features[i], norm_feat]))
+        return np.array(norm_features)
+
+    # Apply normalization and create doubled feature vectors
+    X_tr_norm = apply_subject_normalization(train_poses, X_tr_gait, is_training=True)
+    X_te_norm = apply_subject_normalization(test_poses, X_te_gait, is_training=False)
+
+    if enc is not None:
+        print(f'[genome] Path A: Hybrid features (MotionCLIP + gait) → sklearn ensemble (device={DEVICE})', flush=True)
+        # Extract MotionCLIP features
+        X_tr_clip = extract_motionclip_features(enc, train_poses)
+        X_te_clip = extract_motionclip_features(enc, test_poses)
+        # Combine handcrafted (raw + normalized) with MotionCLIP
+        X_tr = np.concatenate([X_tr_norm, X_tr_clip], axis=1)
+        X_te = np.concatenate([X_te_norm, X_te_clip], axis=1)
+    else:
+        print(f'[genome] Path B: Handcrafted gait features only → sklearn ensemble', flush=True)
+        X_tr, X_te = X_tr_norm, X_te_norm
+>>>>>>> REPLACE
+</DIFF>

@@ -1,0 +1,58 @@
+========================================================================
+[evaluate] genome:      gen_91
+[evaluate] program:     /workspace/ShinkaEvolveCarePD/results/care_pd_full/gen_91/main.py
+[evaluate] results_dir: /workspace/ShinkaEvolveCarePD/results/care_pd_full/gen_91/results
+[evaluate] care_pd_dir: /workspace/CARE-PD
+[evaluate] gpu:         CUDA  device=NVIDIA RTX A5000  vram=25.3GB  gpus=1
+========================================================================
+[evaluate] Loading dataset from /workspace/CARE-PD/assets/datasets/BMCLab.pkl ...
+[evaluate] Dataset loaded in 0.12s
+[evaluate] subjects=23  walks=781  label_dist={0:341, 1:276, 2:164}  folds=6
+[evaluate] Pretrained checkpoints available:
+  mixste: best_epoch_cpn_81f.bin (404.7MB)
+  momask: opt.txt (0.0MB), .DS_Store (0.0MB), net_best_fid.tar (84.1MB)
+  motionagformer: motionagformer-s-h36m.pth.tr (59.8MB)
+  motionbert: motionbert.bin (170.0MB)
+  motionbertlite: latest_epoch.bin (64.1MB)
+  motionclip: motionclip_encoder_checkpoint_0100.pth.tar (77.9MB), .DS_Store (0.0MB)
+  poseformerv2: 27_243_45.2.bin (172.8MB), 9_81_46.0.bin (172.5MB), .DS_Store (0.0MB)
+  potr: pre-trained_NTU_ckpt_epoch_199_enc_80_dec_20.pt (26.5MB)
+========================================================================
+[evaluate] Importing genome ...
+[evaluate] Import OK (5.87s)
+[evaluate] Running run_evaluation() ...
+[genome] Extracting handcrafted gait features...
+[genome] checkpoint: 2/101 layers loaded from motionclip_encoder_checkpoint_0100.pth.tar
+[genome] Adding MotionCLIP features (device=cuda)
+[genome] Combined features: 2133 dims
+[genome] Training sklearn voting ensemble on 2133-dim features
+  fold 1: macro_f1=0.3970  f1=[normal:0.367, mild:0.667, severe:0.157]
+[genome] Extracting handcrafted gait features...
+[genome] checkpoint: 2/101 layers loaded from motionclip_encoder_checkpoint_0100.pth.tar
+[genome] Adding MotionCLIP features (device=cuda)
+[genome] Combined features: 2133 dims
+[genome] Training sklearn voting ensemble on 2133-dim features
+  fold 2: macro_f1=0.5312  f1=[normal:0.898, mild:0.000, severe:0.696]
+[genome] Extracting handcrafted gait features...
+[genome] checkpoint: 2/101 layers loaded from motionclip_encoder_checkpoint_0100.pth.tar
+[genome] Adding MotionCLIP features (device=cuda)
+[genome] Combined features: 2133 dims
+[genome] Training sklearn voting ensemble on 2133-dim features
+  fold 3: macro_f1=0.8420  f1=[normal:0.884, mild:0.800, severe:0.000]
+[genome] Extracting handcrafted gait features...
+[genome] checkpoint: 2/101 layers loaded from motionclip_encoder_checkpoint_0100.pth.tar
+[genome] Adding MotionCLIP features (device=cuda)
+[genome] Combined features: 2133 dims
+[genome] Training sklearn voting ensemble on 2133-dim features
+  fold 4: macro_f1=0.8527  f1=[normal:0.780, mild:0.862, severe:0.917]
+[genome] Extracting handcrafted gait features...
+[genome] checkpoint: 2/101 layers loaded from motionclip_encoder_checkpoint_0100.pth.tar
+[genome] Adding MotionCLIP features (device=cuda)
+[genome] Combined features: 2133 dims
+[genome] Training sklearn voting ensemble on 2133-dim features
+  fold 5: macro_f1=0.4840  f1=[normal:0.785, mild:0.667, severe:0.000]
+[genome] Extracting handcrafted gait features...
+[genome] checkpoint: 2/101 layers loaded from motionclip_encoder_checkpoint_0100.pth.tar
+[genome] Adding MotionCLIP features (device=cuda)
+[genome] Combined features: 2133 dims
+[genome] Training sklearn voting ensemble on 2133-dim features

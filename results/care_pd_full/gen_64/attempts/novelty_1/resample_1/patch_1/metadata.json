@@ -1,0 +1,14 @@
+{
+  "generation": 64,
+  "novelty_attempt": 1,
+  "resample_attempt": 1,
+  "patch_attempt": 1,
+  "success": true,
+  "num_applied": 1,
+  "patch_name": "improved_handcrafted_features_weighted_ensemble",
+  "patch_description": "This redesign focuses on fixing critical issues and maximizing performance through a hybrid approach of physics-informed gait features and proper class weighting. Key structural improvements:\n\n1. FIXED CLASS WEIGHTING: The original program incorrectly applied sample weights only to GradientBoosting. Now properly uses class_weight in all base classifiers (RF, GB, SVM) as recommended.\n\n2. FEATURE STANDARDIZATION: Added robust StandardScaler within each pipeline to normalize handcrafted features.\n\n3. CLASS 2 PRIORITIZATION: Adjusted class weights to emphasize severe PD detection (class 2) by applying inverse-frequency weighting with a moderate 1.2x boost to class 2.\n\n4. SIMPLIFIED ENSEMBLE: Removed CalibratedClassifierCV (adds minimal value) and uses standard soft voting with equal weights for stability.\n\n5. BETTER FEATURE ENGINEERING: Simplified gait feature extraction by removing redundant categories while keeping clinically significant features (asymmetry, ROM, frequency, regularity).\n\n6. ERROR HANDLING: Added comprehensive NaN/inf handling at multiple stages.\n\nThe architecture maintains the proven hybrid approach but with corrected weighting and streamlined processing for better severe class detection.",
+  "error_msg": null,
+  "timestamp": "2026-04-06T20:16:42.248319",
+  "llm_cost": 0.0062875,
+  "llm_model": null
+}

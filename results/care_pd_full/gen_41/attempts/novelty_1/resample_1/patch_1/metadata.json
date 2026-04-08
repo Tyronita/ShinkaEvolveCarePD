@@ -1,0 +1,14 @@
+{
+  "generation": 41,
+  "novelty_attempt": 1,
+  "resample_attempt": 1,
+  "patch_attempt": 1,
+  "success": true,
+  "num_applied": 7,
+  "patch_name": "add_temporal_segmentation_features",
+  "patch_description": "Add temporal segmentation features to capture within-walk gait deterioration and freezing episodes. The current handcrafted features are computed on the entire sequence, which averages out important temporal dynamics like gait freezing or deterioration in moderate-to-severe PD. By splitting each walk into 4 non-overlapping segments and computing per-segment statistics, we can capture the variability of gait patterns within a single walk. This is particularly important for the mild/severe boundary where 58 severe cases are currently misclassified. We compute the standard deviation of per-segment means across all feature categories, adding 144 dimensions of temporal variability that directly proxy the within-walk fluctuations characteristic of moderate-to-severe PD. This change targets the primary bottleneck of severe class F1 by adding discriminative features for gait instability and freezing episodes that are invisible to whole-sequence statistics.",
+  "error_msg": null,
+  "timestamp": "2026-04-06T17:23:57.795551",
+  "llm_cost": 0.002223981,
+  "llm_model": null
+}

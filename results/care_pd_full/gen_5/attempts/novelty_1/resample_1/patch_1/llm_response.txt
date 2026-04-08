@@ -1,0 +1,344 @@
+<NAME>
+motionclip_aggregated
+</NAME>
+
+<DESCRIPTION>
+Completely restructures the program to use a multi-window temporal aggregation strategy with MotionCLIP. Instead of extracting a single 60-frame center crop per walk, we slide a 60-frame window across each walk with 50% overlap and extract MotionCLIP features from each window. These features are then temporally pooled using learnable attention weights to produce a single walk-level embedding. This captures more temporal information from long walking bouts while maintaining the benefits of pretrained MotionCLIP features.
+
+Key architectural changes:
+1. Multi-window feature extraction instead of single center crop
+2. Attention-based temporal pooling with learnable weights
+3. Integrated end-to-end training (no separate feature extraction phase)
+4. Proper handling of variable-length sequences through padding and masking
+5. Use of official CARE-PD utilities instead of inlined implementations
+
+This structure better captures gait patterns across entire walks, especially important for longer sequences, and gives the model attention mechanisms to focus on the most discriminative temporal segments.
+</DESCRIPTION>
+
+<CODE>
+```python
+"""
+CARE-PD: UPDRS Gait Score Prediction from SMPL Pose Sequences
+Task: 3-class classification (UPDRS_GAIT in {0, 1, 2}) on BMCLab dataset.
+Improved architecture using multi-window MotionCLIP aggregation.
+"""
+
+import os
+import numpy as np
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from sklearn.metrics import f1_score
+
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
+# ===========================================================================
+# EVOLVE-BLOCK-START
+# ===========================================================================
+
+# Import required utilities from CARE-PD
+from data.preprocessing.preprocessing_utils import (
+    axis_angle_to_matrix,      # (N,3) → (N,3,3) rotation matrices
+    matrix_to_rotation_6d,     # (N,3,3) → (N,6) 6D representation
+    get_6D_rep_from_24x3_pose, # (24,3) → (25,6) per-frame conversion
+)
+from model.backbone_loader import load_pretrained_backbone
+from learning.criterion import FocalLoss
+from data.dataloaders import DataPreprocessor
+
+
+class MotionCLIPExtractor(nn.Module):
+    """
+    Wrapper for pretrained MotionCLIP encoder to extract 512-dim features
+    from 60-frame windows of SMPL pose sequences.
+    """
+    def __init__(self, care_pd_dir: str):
+        super().__init__()
+        ckpt = os.path.join(care_pd_dir, 
+                           "assets/Pretrained_checkpoints/motionclip/motionclip_encoder_checkpoint_0100.pth.tar")
+        self.encoder = load_pretrained_backbone({
+            "backbone": "motionclip",
+            "model_checkpoint_path": ckpt
+        }, "motionclip").to(DEVICE)
+        self.encoder.eval()
+        # Freeze encoder parameters
+        for p in self.encoder.parameters():
+            p.requires_grad = False
+    
+    def forward(self, x):
+        """
+        Args:
+            x: (B, 60, 25, 6) tensor of 6D rotation sequences
+        Returns:
+            (B, 512) motion embeddings
+        """
+        with torch.no_grad():
+            return self.encoder(x, return_rep=True)
+
+
+class AttentionPool(nn.Module):
+    """
+    Learnable attention pooling over temporal dimension.
+    Converts sequence of frame-level features to single walk-level embedding.
+    """
+    def __init__(self, dim):
+        super().__init__()
+        self.attention = nn.Sequential(
+            nn.Linear(dim, dim // 2),
+            nn.Tanh(),
+            nn.Linear(dim // 2, 1),
+            nn.Softmax(dim=1)
+        )
+        self.projection = nn.Linear(dim, dim)
+        
+    def forward(self, x, mask=None):
+        """
+        Args:
+            x: (B, T, D) feature sequence
+            mask: (B, T) binary mask indicating valid frames
+        Returns:
+            (B, D) pooled feature vector
+        """
+        # Project features
+        projected = torch.tanh(self.projection(x))  # (B, T, D)
+        
+        # Compute attention weights
+        weights = self.attention(projected)  # (B, T, 1)
+        
+        # Apply mask if provided
+        if mask is not None:
+            mask_expanded = mask.unsqueeze(-1)  # (B, T, 1)
+            weights = weights.masked_fill(mask_expanded == 0, -1e9)
+            weights = torch.softmax(weights, dim=1)
+        
+        # Weighted sum
+        pooled = torch.sum(weights * projected, dim=1)  # (B, D)
+        return pooled
+
+
+class GaitClassifier(nn.Module):
+    """
+    Full model: multi-window MotionCLIP feature extraction + attention pooling + classification.
+    """
+    def __init__(self, care_pd_dir: str, num_classes=3):
+        super().__init__()
+        self.motionclip = MotionCLIPExtractor(care_pd_dir)
+        self.dropout = nn.Dropout(0.3)
+        self.pool = AttentionPool(512)
+        self.classifier = nn.Sequential(
+            nn.Linear(512, 256),
+            nn.GELU(),
+            nn.Dropout(0.3),
+            nn.Linear(256, 128),
+            nn.GELU(),
+            nn.Dropout(0.2),
+            nn.Linear(128, num_classes)
+        )
+    
+    def extract_windows(self, pose_sequence):
+        """
+        Convert SMPL pose sequence to overlapping 60-frame windows with 6D rotations.
+        Args:
+            pose_sequence: (T, 72) numpy array
+        Returns:
+            windows: (N, 60, 25, 6) tensor, N = number of windows
+        """
+        T = pose_sequence.shape[0]
+        
+        # Convert to 6D representation
+        frames_6d = []
+        for t in range(T):
+            pose_t = pose_sequence[t].reshape(24, 3)  # (24, 3)
+            r6 = get_6D_rep_from_24x3_pose(pose_t)   # (25, 6)
+            frames_6d.append(r6)
+        
+        frames_6d = np.stack(frames_6d)  # (T, 25, 6)
+        
+        # Create overlapping windows
+        window_size = 60
+        stride = 30  # 50% overlap
+        windows = []
+        
+        for start in range(0, max(1, T - window_size + 1), stride):
+            end = start + window_size
+            if end > T:
+                # Pad with last frame
+                window = np.tile(frames_6d[-1], (window_size, 1, 1))
+                window[:T-start] = frames_6d[start:]
+            else:
+                window = frames_6d[start:end]
+            windows.append(window)
+        
+        # If sequence is shorter than window_size, repeat it
+        if len(windows) == 0:
+            window = np.tile(frames_6d[-1], (window_size, 1, 1))
+            window[:T] = frames_6d
+            windows = [window]
+        
+        return torch.from_numpy(np.stack(windows)).float().to(DEVICE)  # (N, 60, 25, 6)
+    
+    def forward(self, pose_sequences):
+        """
+        Args:
+            pose_sequences: list of (T_i, 72) numpy arrays
+        Returns:
+            logits: (B, 3) classification logits
+        """
+        batch_size = len(pose_sequences)
+        
+        # Extract features from all windows
+        all_features = []
+        window_counts = []
+        valid_mask = []
+        
+        for pose_seq in pose_sequences:
+            windows = self.extract_windows(pose_seq)  # (N, 60, 25, 6)
+            N = windows.shape[0]
+            
+            # Extract MotionCLIP features
+            with torch.no_grad():
+                features = self.motionclip(windows)  # (N, 512)
+            
+            all_features.append(features)
+            window_counts.append(N)
+            
+            # Create mask for valid windows
+            mask = torch.ones(N, dtype=torch.bool, device=features.device)
+            valid_mask.append(mask)
+        
+        # Concatenate all features and create padded tensor
+        max_windows = max(window_counts)
+        B = len(pose_sequences)
+        feature_tensor = torch.zeros(B, max_windows, 512, device=DEVICE)
+        mask_tensor = torch.zeros(B, max_windows, dtype=torch.bool, device=DEVICE)
+        
+        start_idx = 0
+        for i, (feat, mask) in enumerate(zip(all_features, valid_mask)):
+            n = feat.shape[0]
+            feature_tensor[i, :n] = feat
+            mask_tensor[i, :n] = mask
+        
+        # Apply attention pooling
+        pooled = self.pool(feature_tensor, mask_tensor)  # (B, 512)
+        pooled = self.dropout(pooled)
+        
+        # Classify
+        logits = self.classifier(pooled)  # (B, 3)
+        return logits
+
+
+def train_and_predict(train_poses: list, y_train: np.ndarray,
+                      test_poses: list, care_pd_dir: str = None) -> np.ndarray:
+    """
+    Train and evaluate the gait classification model using multi-window aggregation.
+    """
+    if care_pd_dir is None:
+        raise ValueError("care_pd_dir must be provided for MotionCLIP checkpoint")
+    
+    # Initialize model
+    model = GaitClassifier(care_pd_dir).to(DEVICE)
+    
+    # Prepare data
+    X_train = [torch.from_numpy(p.astype(np.float32)) for p in train_poses]
+    y_train = torch.tensor(y_train, dtype=torch.long).to(DEVICE)
+    X_test = [torch.from_numpy(p.astype(np.float32)) for p in test_poses]
+    
+    # Compute class weights for focal loss
+    class_counts = np.bincount(y_train.cpu().numpy(), minlength=3)
+    class_weights = torch.tensor(class_counts.sum() / (3 * class_counts), dtype=torch.float32).to(DEVICE)
+    
+    # Loss function and optimizer
+    loss_fn = FocalLoss(alpha=0.25, gamma=2.0)
+    optimizer = optim.AdamW([
+        {'params': model.pool.parameters(), 'lr': 1e-3},
+        {'params': model.classifier.parameters(), 'lr': 1e-3}
+    ], weight_decay=1e-4)
+    
+    # Training loop
+    model.train()
+    epochs = 100
+    batch_size = 16
+    
+    for epoch in range(epochs):
+        # Shuffle training data
+        indices = torch.randperm(len(X_train))
+        for i in range(0, len(X_train), batch_size):
+            batch_indices = indices[i:i+batch_size]
+            batch_poses = [X_train[idx] for idx in batch_indices]
+            batch_labels = y_train[batch_indices]
+            
+            optimizer.zero_grad()
+            logits = model(batch_poses)
+            loss = loss_fn(logits, batch_labels)
+            loss.backward()
+            optimizer.step()
+    
+    # Evaluation
+    model.eval()
+    with torch.no_grad():
+        test_logits = model(X_test)
+        predictions = test_logits.argmax(dim=1).cpu().numpy()
+    
+    return predictions
+
+# ===========================================================================
+# EVOLVE-BLOCK-END
+# ===========================================================================
+
+
+def run_evaluation(data: dict, folds: dict, care_pd_dir: str = None) -> dict:
+    """
+    6-fold subject-level cross-validation harness. Fixed — not evolved.
+    """
+    all_preds, all_labels = [], []
+    per_fold_results = {}
+
+    for fold_id, split in folds.items():
+        def get_data(subjects):
+            poses, labels = [], []
+            for sub in subjects:
+                if sub not in data:
+                    continue
+                for wd in data[sub].values():
+                    poses.append(wd['pose'].astype(np.float32))
+                    labels.append(int(wd['UPDRS_GAIT']))
+            return poses, np.array(labels, dtype=np.int64)
+
+        tr_poses, y_tr = get_data(split['train'])
+        te_poses, y_te = get_data(split['eval'])
+
+        if not te_poses or len(np.unique(y_tr)) < 2:
+            continue
+
+        preds = train_and_predict(tr_poses, y_tr, te_poses, care_pd_dir=care_pd_dir)
+        all_preds.extend(preds.tolist())
+        all_labels.extend(y_te.tolist())
+
+        fold_f1 = float(f1_score(y_te, preds, average='macro', zero_division=0))
+        pc_f1   = f1_score(y_te, preds, average=None, labels=[0,1,2], zero_division=0)
+        per_fold_results[str(fold_id)] = {
+            'macro_f1':      round(fold_f1, 4),
+            'n_test_walks':  int(len(y_te)),
+            'n_train_walks': int(len(y_tr)),
+        }
+        print(f'  fold {fold_id}: macro_f1={fold_f1:.4f}  '
+              f'f1=[normal:{pc_f1[0]:.3f}, mild:{pc_f1[1]:.3f}, severe:{pc_f1[2]:.3f}]',
+              flush=True)
+
+    macro_f1     = float(f1_score(all_labels, all_preds, average='macro',  zero_division=0))
+    per_class_f1 = f1_score(all_labels, all_preds, average=None, labels=[0,1,2], zero_division=0)
+
+    print(f'\n[result] macro_f1={macro_f1:.4f}  '
+          f'f1_class=[normal:{per_class_f1[0]:.4f}, mild:{per_class_f1[1]:.4f}, '
+          f'severe:{per_class_f1[2]:.4f}]  device={DEVICE}', flush=True)
+
+    return {
+        'combined_score':   macro_f1,
+        'all_preds':        all_preds,
+        'all_labels':       all_labels,
+        'per_fold_results': per_fold_results,
+        'per_class_f1':     per_class_f1.tolist(),
+    }
+```
+</CODE>

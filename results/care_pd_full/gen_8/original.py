@@ -1,0 +1,400 @@
+"""
+CARE-PD: UPDRS Gait Score Prediction from SMPL Pose Sequences
+Task: 3-class classification (UPDRS_GAIT in {0, 1, 2}) on BMCLab dataset.
+Data: raw SMPL pose (frames, 72) per walk. 6-fold subject-level CV.
+Fitness: macro-F1 (higher is better). Baseline: 0.565 (RandomForest).
+Target: 0.68+ (CARE-PD LOSO SOTA), 0.74+ (MIDA SOTA).
+
+Architecture overview:
+  1. SMPL axis-angle (T, 72) → 6D rotation (T, 25, 6)   [inline, mutable]
+  2. Crop/pad to 60 frames → (1, 60, 25, 6)              [inline, mutable]
+  3. MotionCLIP Transformer encoder → mu (1, 512)         [inline, mutable]
+  4. MLP classifier head → logits (1, 3)                  [inline, mutable]
+  5. FocalLoss with class weighting                        [inline, mutable]
+
+Everything in the EVOLVE-BLOCK is mutable. Promising mutations:
+  - Fine-tune MotionCLIP encoder (unfreeze last N layers, lower LR=1e-5)
+  - Change latent_dim / num_layers / num_heads / ff_size
+  - Multi-window: slide 60-frame windows, aggregate with attention pooling
+  - Add temporal self-attention on top of per-window embeddings
+  - Try 9D rotation (full matrix), velocity features, or frequency-domain features
+  - Modify FocalLoss alpha/gamma for class imbalance
+  - Add asymmetry features (L-R joint rotation differences) as extra channels
+  - Use the Skeleton FK utility to derive 3D joint positions from rotations
+"""
+
+import collections
+import os
+import numpy as np
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from sklearn.metrics import f1_score
+
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
+# ===========================================================================
+# EVOLVE-BLOCK-START
+# ===========================================================================
+
+# ── Rotation utilities ──────────────────────────────────────────────────────
+# Inlined from CARE-PD data/preprocessing/preprocessing_utils.py
+# (Zhou et al. 2019 — "On the Continuity of Rotation Representations")
+# Mutable: try 9D (full matrix), quaternion, or euler representations.
+
+def _aa_to_quat(aa: torch.Tensor) -> torch.Tensor:
+    """Axis-angle (..., 3) → quaternion (..., 4) [w, x, y, z]."""
+    angles = torch.norm(aa, p=2, dim=-1, keepdim=True).clamp(min=1e-8)
+    half   = 0.5 * angles
+    small  = angles.abs() < 1e-6
+    s      = torch.where(small, 0.5 - angles * angles / 48, torch.sin(half) / angles)
+    return torch.cat([torch.cos(half), aa * s], dim=-1)
+
+
+def _quat_to_mat(q: torch.Tensor) -> torch.Tensor:
+    """Quaternion (..., 4) [w, x, y, z] → rotation matrix (..., 3, 3)."""
+    r, i, j, k = torch.unbind(q, -1)
+    s = 2.0 / (q * q).sum(-1)
+    o = torch.stack([
+        1 - s*(j*j + k*k), s*(i*j - k*r),     s*(i*k + j*r),
+        s*(i*j + k*r),     1 - s*(i*i + k*k), s*(j*k - i*r),
+        s*(i*k - j*r),     s*(j*k + i*r),     1 - s*(i*i + j*j),
+    ], dim=-1)
+    return o.reshape(q.shape[:-1] + (3, 3))
+
+
+def _mat_to_6d(mat: torch.Tensor) -> torch.Tensor:
+    """Rotation matrix (..., 3, 3) → 6D representation (..., 6) [first 2 rows]."""
+    return mat[..., :2, :].clone().reshape(*mat.shape[:-2], 6)
+
+
+def smpl_to_6d(pose: np.ndarray) -> np.ndarray:
+    """
+    Convert SMPL axis-angle pose to 6D rotation + zero translation.
+
+    Args:
+        pose: (T, 72) float32  — 24 joints × 3 axis-angle params per frame
+    Returns:
+        (T, 25, 6) float32  — 24 joints × 6D rotation + 1 zero translation slot
+    """
+    T  = len(pose)
+    aa = torch.from_numpy(pose.reshape(T, 24, 3)).float()
+    r6 = _mat_to_6d(_quat_to_mat(_aa_to_quat(aa))).numpy()        # (T, 24, 6)
+    return np.concatenate([r6, np.zeros((T, 1, 6), np.float32)], 1)  # (T, 25, 6)
+
+
+def crop_pad_frames(seq: np.ndarray, n: int = 60) -> np.ndarray:
+    """Center-crop or repeat-pad a (T, ...) sequence to exactly n frames."""
+    T = len(seq)
+    if T >= n:
+        s = (T - n) // 2
+        return seq[s:s + n]
+    reps = (n + T - 1) // T
+    return np.tile(seq, (reps,) + (1,) * (seq.ndim - 1))[:n]
+
+
+# ── MotionCLIP encoder ──────────────────────────────────────────────────────
+# Inlined from CARE-PD model/motionclip/transformer.py
+# Pretrained on diverse human motions → rich 512-dim gait embeddings.
+# Mutable: latent_dim, num_layers, num_heads, ff_size, dropout,
+#          add layer norm, modify positional encoding, try CLS-only pooling.
+
+class _PosEnc(nn.Module):
+    def __init__(self, d: int, drop: float = 0.1, max_len: int = 5000):
+        super().__init__()
+        self.drop = nn.Dropout(drop)
+        pe = torch.zeros(max_len, d)
+        pos = torch.arange(0, max_len).float().unsqueeze(1)
+        div = torch.exp(torch.arange(0, d, 2).float() * (-np.log(10000.0) / d))
+        pe[:, 0::2] = torch.sin(pos * div)
+        pe[:, 1::2] = torch.cos(pos * div)
+        self.register_buffer('pe', pe.unsqueeze(0).transpose(0, 1))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.drop(x + self.pe[:x.shape[0]])
+
+
+class MotionCLIPEncoder(nn.Module):
+    """
+    MotionCLIP Transformer encoder (inlined from CARE-PD).
+    Input:  (B, T, 25, 6) — 6D SMPL rotations, variable T frames
+    Output: (B, latent_dim) — motion embedding (mu token)
+
+    Pretrained weights match: njoints=25, nfeats=6, latent_dim=512,
+    ff_size=1024, num_layers=8, num_heads=4.
+
+    Checkpoint: {care_pd_dir}/assets/Pretrained_checkpoints/motionclip/
+                motionclip_encoder_checkpoint_0100.pth.tar
+    """
+    def __init__(self, njoints: int = 25, nfeats: int = 6,
+                 latent_dim: int = 512, ff_size: int = 1024,
+                 num_layers: int = 8, num_heads: int = 4,
+                 dropout: float = 0.1):
+        super().__init__()
+        self.input_feats  = njoints * nfeats
+        self.latent_dim   = latent_dim
+        self.muQuery      = nn.Parameter(torch.randn(1, latent_dim))
+        self.sigmaQuery   = nn.Parameter(torch.randn(1, latent_dim))
+        self.embed        = nn.Linear(self.input_feats, latent_dim)
+        self.pos_enc      = _PosEnc(latent_dim, dropout)
+        layer = nn.TransformerEncoderLayer(
+            d_model=latent_dim, nhead=num_heads,
+            dim_feedforward=ff_size, dropout=dropout, activation='gelu')
+        self.encoder      = nn.TransformerEncoder(layer, num_layers=num_layers)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """x: (B, T, 25, 6) → mu: (B, latent_dim)"""
+        B, T, J, F = x.shape
+        # (T, B, J*F)
+        x = x.permute(1, 0, 2, 3).reshape(T, B, J * F)
+        x = self.embed(x)                                      # (T, B, D)
+        # Prepend learned mu / sigma query tokens
+        y    = torch.zeros(B, dtype=torch.long, device=x.device)
+        xseq = torch.cat([self.muQuery[y].unsqueeze(0),
+                          self.sigmaQuery[y].unsqueeze(0), x], dim=0)
+        xseq = self.pos_enc(xseq)
+        mask = torch.ones(B, T + 2, dtype=torch.bool, device=x.device)
+        out  = self.encoder(xseq, src_key_padding_mask=~mask)
+        return out[0]   # mu token — (B, D)
+
+
+def _load_checkpoint(model: nn.Module, path: str) -> nn.Module:
+    """
+    Load pretrained weights into model, stripping DataParallel 'module.' prefix.
+    Inlined from CARE-PD model/backbone_loader.py → load_pretrained_weights().
+    """
+    ckpt  = torch.load(path, map_location='cpu', weights_only=False)
+    sd    = ckpt.get('state_dict', ckpt)
+    msd   = model.state_dict()
+    first = next(iter(msd))
+    new   = collections.OrderedDict()
+    for k, v in sd.items():
+        if k.startswith('module.') and 'module.' not in first:
+            k = k[7:]
+        if k in msd:
+            new[k] = v
+    msd.update(new)
+    model.load_state_dict(msd, strict=True)
+    print(f'[genome] checkpoint: {len(new)}/{len(msd)} layers loaded from {os.path.basename(path)}')
+    return model
+
+
+def load_motionclip(care_pd_dir: str) -> nn.Module:
+    """
+    Load pretrained MotionCLIP encoder, frozen, on DEVICE.
+    Returns None if checkpoint not found or load fails.
+    """
+    if care_pd_dir is None:
+        return None
+    ckpt = os.path.join(care_pd_dir, 'assets', 'Pretrained_checkpoints',
+                        'motionclip', 'motionclip_encoder_checkpoint_0100.pth.tar')
+    if not os.path.isfile(ckpt):
+        print(f'[genome] MotionCLIP checkpoint not found: {ckpt}')
+        return None
+    try:
+        enc = MotionCLIPEncoder(
+            njoints=25, nfeats=6, latent_dim=512,
+            ff_size=1024, num_layers=8, num_heads=4).to(DEVICE)
+        _load_checkpoint(enc, ckpt)
+        enc.eval()
+        for p in enc.parameters():
+            p.requires_grad_(False)
+        return enc
+    except Exception as e:
+        print(f'[genome] MotionCLIP load failed: {e}')
+        return None
+
+
+# ── FocalLoss ────────────────────────────────────────────────────────────────
+# Inlined from CARE-PD learning/criterion.py
+# Better than CrossEntropyLoss for imbalanced UPDRS distribution {0:341,1:276,2:164}.
+# Mutable: alpha (down-weights easy examples), gamma (focusing strength).
+#          Try alpha=0.25/0.5, gamma=1.0/2.0/5.0. Or switch to WCE:
+#          nn.CrossEntropyLoss(weight=class_weights_tensor)
+
+class FocalLoss(nn.Module):
+    def __init__(self, alpha: float = 0.25, gamma: float = 2.0):
+        super().__init__()
+        self.alpha = alpha
+        self.gamma = gamma
+
+    def forward(self, logits: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
+        ce   = nn.functional.cross_entropy(logits, targets, reduction='none')
+        pt   = torch.exp(-ce)
+        return (self.alpha * (1 - pt) ** self.gamma * ce).mean()
+
+
+# ── Feature extraction ───────────────────────────────────────────────────────
+
+@torch.no_grad()
+def extract_features(encoder: nn.Module, poses: list) -> np.ndarray:
+    """
+    Extract MotionCLIP embeddings for a list of variable-length pose arrays.
+
+    Strategy: center-crop each walk to 60 frames → encode → 512-dim embedding.
+    Mutable: try sliding-window aggregation, multi-scale crops, temporal pooling.
+
+    Args:
+        encoder: frozen MotionCLIPEncoder on DEVICE
+        poses: list of (T_i, 72) float32 arrays
+    Returns:
+        (N, 512) numpy feature matrix
+    """
+    embs = []
+    for pose in poses:
+        rot6d = smpl_to_6d(pose)                               # (T, 25, 6)
+        seq   = crop_pad_frames(rot6d, n=60)                   # (60, 25, 6)
+        x     = torch.from_numpy(seq).float().unsqueeze(0).to(DEVICE)  # (1, 60, 25, 6)
+        embs.append(encoder(x).cpu().numpy())                  # (1, 512)
+    return np.vstack(embs)                                     # (N, 512)
+
+
+# ── Classifier head ──────────────────────────────────────────────────────────
+
+class ClassifierMLP(nn.Module):
+    """
+    Shallow MLP on top of frozen MotionCLIP embeddings.
+    Mutable: depth, width, dropout, activation, batch norm, residual connections.
+    """
+    def __init__(self, in_dim: int = 512, n_classes: int = 3, dropout: float = 0.3):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(in_dim, 256), nn.GELU(), nn.Dropout(dropout),
+            nn.Linear(256, 128),   nn.GELU(), nn.Dropout(0.2),
+            nn.Linear(128, n_classes),
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.net(x)
+
+
+def train_classifier(feat_train: np.ndarray, y_train: np.ndarray,
+                     feat_test:  np.ndarray,
+                     epochs: int = 150, lr: float = 1e-3) -> np.ndarray:
+    """
+    Train ClassifierMLP on precomputed MotionCLIP features.
+
+    Class weights computed from training label distribution to handle imbalance.
+    Uses FocalLoss + AdamW + cosine LR schedule.
+
+    Mutable: epochs, lr, batch_size, loss function, optimizer, schedule.
+    """
+    n_cls   = 3
+    counts  = np.bincount(y_train, minlength=n_cls).astype(float)
+    counts  = np.where(counts == 0, 1.0, counts)
+    # Class weights: inverse frequency, normalized
+    w       = torch.tensor(counts.sum() / (n_cls * counts), dtype=torch.float32).to(DEVICE)
+
+    clf  = ClassifierMLP(in_dim=feat_train.shape[1], n_classes=n_cls).to(DEVICE)
+    opt  = optim.AdamW(clf.parameters(), lr=lr, weight_decay=1e-3)
+    loss_fn = FocalLoss(alpha=0.25, gamma=2.0)
+    sch  = optim.lr_scheduler.CosineAnnealingLR(opt, T_max=epochs)
+
+    X_tr = torch.from_numpy(feat_train.astype(np.float32)).to(DEVICE)
+    y_tr = torch.tensor(y_train, dtype=torch.long).to(DEVICE)
+    X_te = torch.from_numpy(feat_test.astype(np.float32)).to(DEVICE)
+
+    N, bs = len(X_tr), 64
+    clf.train()
+    for _ in range(epochs):
+        perm = torch.randperm(N)
+        for s in range(0, N, bs):
+            b = perm[s:s + bs]
+            opt.zero_grad()
+            loss_fn(clf(X_tr[b]), y_tr[b]).backward()
+            opt.step()
+        sch.step()
+
+    clf.eval()
+    with torch.no_grad():
+        return clf(X_te).argmax(1).cpu().numpy()
+
+
+def train_and_predict(train_poses: list, y_train: np.ndarray,
+                      test_poses: list, care_pd_dir: str = None) -> np.ndarray:
+    """
+    Main prediction pipeline.
+
+    Path A (preferred): Frozen MotionCLIP → 512-dim embeddings → MLP classifier
+    Path B (fallback):  Mean+std of 6D rotation features → MLP classifier
+
+    Mutable: add fine-tuning path, multi-window aggregation, ensemble of paths.
+    """
+    enc = load_motionclip(care_pd_dir)
+
+    if enc is not None:
+        print(f'[genome] Path A: MotionCLIP frozen features → MLP  (device={DEVICE})', flush=True)
+        feat_tr = extract_features(enc, train_poses)   # (N_train, 512)
+        feat_te = extract_features(enc, test_poses)    # (N_test,  512)
+    else:
+        print(f'[genome] Path B: 6D rotation mean+std → MLP  (device={DEVICE})', flush=True)
+        def _fallback_feat(pose):
+            r = smpl_to_6d(pose).reshape(len(pose), -1)   # (T, 150)
+            return np.concatenate([r.mean(0), r.std(0)])   # (300,)
+        feat_tr = np.stack([_fallback_feat(p) for p in train_poses])
+        feat_te = np.stack([_fallback_feat(p) for p in test_poses])
+
+    return train_classifier(feat_tr, y_train, feat_te)
+
+# ===========================================================================
+# EVOLVE-BLOCK-END
+# ===========================================================================
+
+
+def run_evaluation(data: dict, folds: dict, care_pd_dir: str = None) -> dict:
+    """
+    6-fold subject-level cross-validation harness. Fixed — not evolved.
+
+    Prints per-class and per-fold F1 after each fold so the meta-LLM can
+    read stdout and reason about which strategies improve class-2 (severe PD).
+    """
+    all_preds, all_labels = [], []
+    per_fold_results = {}
+
+    for fold_id, split in folds.items():
+        def get_data(subjects):
+            poses, labels = [], []
+            for sub in subjects:
+                if sub not in data:
+                    continue
+                for wd in data[sub].values():
+                    poses.append(wd['pose'].astype(np.float32))
+                    labels.append(int(wd['UPDRS_GAIT']))
+            return poses, np.array(labels, dtype=np.int64)
+
+        tr_poses, y_tr = get_data(split['train'])
+        te_poses, y_te = get_data(split['eval'])
+
+        if not te_poses or len(np.unique(y_tr)) < 2:
+            continue
+
+        preds = train_and_predict(tr_poses, y_tr, te_poses, care_pd_dir=care_pd_dir)
+        all_preds.extend(preds.tolist())
+        all_labels.extend(y_te.tolist())
+
+        fold_f1 = float(f1_score(y_te, preds, average='macro', zero_division=0))
+        pc_f1   = f1_score(y_te, preds, average=None, labels=[0,1,2], zero_division=0)
+        per_fold_results[str(fold_id)] = {
+            'macro_f1':      round(fold_f1, 4),
+            'n_test_walks':  int(len(y_te)),
+            'n_train_walks': int(len(y_tr)),
+        }
+        print(f'  fold {fold_id}: macro_f1={fold_f1:.4f}  '
+              f'f1=[normal:{pc_f1[0]:.3f}, mild:{pc_f1[1]:.3f}, severe:{pc_f1[2]:.3f}]',
+              flush=True)
+
+    macro_f1     = float(f1_score(all_labels, all_preds, average='macro',  zero_division=0))
+    per_class_f1 = f1_score(all_labels, all_preds, average=None, labels=[0,1,2], zero_division=0)
+
+    print(f'\n[result] macro_f1={macro_f1:.4f}  '
+          f'f1_class=[normal:{per_class_f1[0]:.4f}, mild:{per_class_f1[1]:.4f}, '
+          f'severe:{per_class_f1[2]:.4f}]  device={DEVICE}', flush=True)
+
+    return {
+        'combined_score':   macro_f1,
+        'all_preds':        all_preds,
+        'all_labels':       all_labels,
+        'per_fold_results': per_fold_results,
+        'per_class_f1':     per_class_f1.tolist(),
+    }

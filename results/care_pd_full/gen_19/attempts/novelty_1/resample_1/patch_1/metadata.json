@@ -1,0 +1,14 @@
+{
+  "generation": 19,
+  "novelty_attempt": 1,
+  "resample_attempt": 1,
+  "patch_attempt": 1,
+  "success": true,
+  "num_applied": 2,
+  "patch_name": "fix_weighted_loss_bug",
+  "patch_description": "The current code calculates class weights `w` but never passes them to the loss function. The FocalLoss is using fixed alpha=0.25 instead of the computed per-class weights. This is a critical bug that prevents recovery of class 2 (severe PD) which requires higher loss weight. We must fix this by either modifying FocalLoss to accept the computed weights or switching to CrossEntropyLoss with weight argument.\n\nThis fix directly addresses the primary bottleneck: class 2 recall is 0.00 across all versions due to this weighting bug. The computed weights will boost the gradient contribution from class 2 samples (weight ~1.59) while reducing class 0 contribution (weight ~0.68), forcing the model to pay attention to severe PD cases.",
+  "error_msg": null,
+  "timestamp": "2026-04-06T14:58:30.443233",
+  "llm_cost": 0.00655092,
+  "llm_model": null
+}

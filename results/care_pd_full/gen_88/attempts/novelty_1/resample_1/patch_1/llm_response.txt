@@ -1,0 +1,73 @@
+<NAME>
+calibrate_gb_for_severe_pd
+</NAME>
+
+<DESCRIPTION>
+The current program calibrates only the Random Forest (RF) classifier using `CalibratedClassifierCV`, but leaves the Gradient Boosting (GB) classifier uncalibrated. This creates a bias in the soft-voting ensemble, as GB tends to produce overconfident and miscalibrated probabilities — especially underestimating the severe PD class (class 2). Since the ensemble averages raw probabilities from both models, an uncalibrated GB can pull predictions toward normal/mild classes, directly harming macro-F1.
+
+We should apply the same isotonic calibration to GB as is used for RF. This ensures both ensemble members contribute well-calibrated probabilities, particularly improving the representation of the underrepresented severe class. This change targets the root cause of the current 0.45 F1 on class 2, without requiring new features or architecture changes.
+
+This edit wraps the GB pipeline in `CalibratedClassifierCV` with `method='isotonic'` and `cv=3`, matching the RF calibration strategy. It follows the winning strategy of using calibrated ensembles for imbalanced clinical classification.
+</DESCRIPTION>
+
+<DIFF>
+<<<<<<< SEARCH
+    from sklearn.calibration import CalibratedClassifierCV
+    # Random Forest pipeline with more trees and finer leaves
+    rf_base = Pipeline([
+        ('scaler', StandardScaler()),
+        ('clf', RandomForestClassifier(
+            n_estimators=500,
+            max_depth=None,
+            min_samples_leaf=1,
+            class_weight=class_weights,
+            random_state=42,
+            n_jobs=-1
+        ))
+    ])
+    # Calibrate probabilities to correct underestimation of severe class
+    rf = CalibratedClassifierCV(rf_base, method='isotonic', cv=3)
+
+    # Gradient Boosting pipeline
+    gb = Pipeline([
+        ('scaler', StandardScaler()),
+        ('clf', GradientBoostingClassifier(
+            n_estimators=200,
+            max_depth=4,
+            learning_rate=0.05,
+            subsample=0.8,
+            random_state=42
+        ))
+    ])
+=======
+    from sklearn.calibration import CalibratedClassifierCV
+    # Random Forest pipeline with more trees and finer leaves
+    rf_base = Pipeline([
+        ('scaler', StandardScaler()),
+        ('clf', RandomForestClassifier(
+            n_estimators=500,
+            max_depth=None,
+            min_samples_leaf=1,
+            class_weight=class_weights,
+            random_state=42,
+            n_jobs=-1
+        ))
+    ])
+    # Calibrate probabilities to correct underestimation of severe class
+    rf = CalibratedClassifierCV(rf_base, method='isotonic', cv=3)
+
+    # Gradient Boosting pipeline
+    gb_base = Pipeline([
+        ('scaler', StandardScaler()),
+        ('clf', GradientBoostingClassifier(
+            n_estimators=200,
+            max_depth=4,
+            learning_rate=0.05,
+            subsample=0.8,
+            random_state=42
+        ))
+    ])
+    # Calibrate GB same as RF to ensure balanced probability contributions
+    gb = CalibratedClassifierCV(gb_base, method='isotonic', cv=3)
+>>>>>>> REPLACE
+</DIFF>

@@ -1,0 +1,85 @@
+========================================================================
+[evaluate] genome:      gen_66
+[evaluate] program:     /workspace/ShinkaEvolveCarePD/results/care_pd_full/gen_66/main.py
+[evaluate] results_dir: /workspace/ShinkaEvolveCarePD/results/care_pd_full/gen_66/results
+[evaluate] care_pd_dir: /workspace/CARE-PD
+[evaluate] gpu:         CUDA  device=NVIDIA RTX A5000  vram=25.3GB  gpus=1
+========================================================================
+[evaluate] Loading dataset from /workspace/CARE-PD/assets/datasets/BMCLab.pkl ...
+[evaluate] Dataset loaded in 0.11s
+[evaluate] subjects=23  walks=781  label_dist={0:341, 1:276, 2:164}  folds=6
+[evaluate] Pretrained checkpoints available:
+  mixste: best_epoch_cpn_81f.bin (404.7MB)
+  momask: opt.txt (0.0MB), .DS_Store (0.0MB), net_best_fid.tar (84.1MB)
+  motionagformer: motionagformer-s-h36m.pth.tr (59.8MB)
+  motionbert: motionbert.bin (170.0MB)
+  motionbertlite: latest_epoch.bin (64.1MB)
+  motionclip: motionclip_encoder_checkpoint_0100.pth.tar (77.9MB), .DS_Store (0.0MB)
+  poseformerv2: 27_243_45.2.bin (172.8MB), 9_81_46.0.bin (172.5MB), .DS_Store (0.0MB)
+  potr: pre-trained_NTU_ckpt_epoch_199_enc_80_dec_20.pt (26.5MB)
+========================================================================
+[evaluate] Importing genome ...
+[evaluate] Import OK (7.59s)
+[evaluate] Running run_evaluation() ...
+[genome] Extracting handcrafted gait features...
+[genome] checkpoint: 2/101 layers loaded from motionclip_encoder_checkpoint_0100.pth.tar
+[genome] Adding MotionCLIP features (device=cuda)
+[genome] Combined features: 2427 dims
+[genome] Training sklearn voting ensemble on 2427-dim features
+  fold 1: macro_f1=0.3365  f1=[normal:0.331, mild:0.442, severe:0.237]
+[genome] Extracting handcrafted gait features...
+[genome] checkpoint: 2/101 layers loaded from motionclip_encoder_checkpoint_0100.pth.tar
+[genome] Adding MotionCLIP features (device=cuda)
+[genome] Combined features: 2427 dims
+[genome] Training sklearn voting ensemble on 2427-dim features
+  fold 2: macro_f1=0.4678  f1=[normal:0.946, mild:0.000, severe:0.457]
+[genome] Extracting handcrafted gait features...
+[genome] checkpoint: 2/101 layers loaded from motionclip_encoder_checkpoint_0100.pth.tar
+[genome] Adding MotionCLIP features (device=cuda)
+[genome] Combined features: 2427 dims
+[genome] Training sklearn voting ensemble on 2427-dim features
+  fold 3: macro_f1=0.5579  f1=[normal:0.881, mild:0.792, severe:0.000]
+[genome] Extracting handcrafted gait features...
+[genome] checkpoint: 2/101 layers loaded from motionclip_encoder_checkpoint_0100.pth.tar
+[genome] Adding MotionCLIP features (device=cuda)
+[genome] Combined features: 2427 dims
+[genome] Training sklearn voting ensemble on 2427-dim features
+  fold 4: macro_f1=0.6818  f1=[normal:0.750, mild:0.673, severe:0.623]
+[genome] Extracting handcrafted gait features...
+[genome] checkpoint: 2/101 layers loaded from motionclip_encoder_checkpoint_0100.pth.tar
+[genome] Adding MotionCLIP features (device=cuda)
+[genome] Combined features: 2427 dims
+[genome] Training sklearn voting ensemble on 2427-dim features
+  fold 5: macro_f1=0.4377  f1=[normal:0.752, mild:0.561, severe:0.000]
+[genome] Extracting handcrafted gait features...
+[genome] checkpoint: 2/101 layers loaded from motionclip_encoder_checkpoint_0100.pth.tar
+[genome] Adding MotionCLIP features (device=cuda)
+[genome] Combined features: 2427 dims
+[genome] Training sklearn voting ensemble on 2427-dim features
+  fold 6: macro_f1=0.4563  f1=[normal:0.667, mild:0.000, severe:0.702]
+
+[result] macro_f1=0.5897  f1_class=[normal:0.7529, mild:0.5444, severe:0.4718]  device=cuda
+========================================================================
+[evaluate] RESULTS — gen_66
+  macro_f1        : 0.5897   (baseline 0.5650, LOSO SOTA 0.68)
+  f1_class0_normal: 0.7529   (n=341 walks)
+  f1_class1_mild  : 0.5444   (n=276 walks)
+  f1_class2_severe: 0.4718   (n=164 walks)  ← clinically most important
+  n_walks_total   : 781
+  eval_time       : 1235.9s
+  confusion_matrix:
+    pred→  [0]   [1]   [2]
+    true[0] normal: [288, 39, 14]
+    true[1] mild  : [89, 135, 52]
+    true[2] severe: [47, 46, 71]
+  per_fold_f1:
+    fold 1: 0.3365  (test=159, train=622)
+    fold 2: 0.4678  (test=122, train=659)
+    fold 3: 0.5579  (test=143, train=638)
+    fold 4: 0.6818  (test=115, train=666)
+    fold 5: 0.4377  (test=135, train=646)
+    fold 6: 0.4563  (test=107, train=674)
+  pred_dist  : {0: 424, 1: 220, 2: 137}
+  label_dist : {0: 341, 1: 276, 2: 164}
+========================================================================
+[evaluate] Leaderboard updated: /workspace/ShinkaEvolveCarePD/care_pd_task/leaderboard.csv

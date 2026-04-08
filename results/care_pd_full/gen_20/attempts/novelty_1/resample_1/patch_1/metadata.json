@@ -1,0 +1,14 @@
+{
+  "generation": 20,
+  "novelty_attempt": 1,
+  "resample_attempt": 1,
+  "patch_attempt": 1,
+  "success": true,
+  "num_applied": 1,
+  "patch_name": "class2_recovery_weighted_loss",
+  "patch_description": "Key insights from analysis:\n\n1. **Class 2 (severe PD) is completely missed (F1=0.00)** across all working programs. The confusion matrix shows 164 severe cases with only 0-1 correct predictions. This is the primary bottleneck. The root cause is that `FocalLoss` uses fixed `alpha=0.25, gamma=2.0` but the computed class weights `w` are NEVER passed to the loss function. Fixing this single bug could dramatically improve class 2 recall.\n\n2. **The current best architecture works** (inline rotation utilities + frozen MotionCLIP + MLP) but the classifier ignores class imbalance entirely. Must use `nn.CrossEntropyLoss(weight=class_weights)` or a properly weighted FocalLoss with per-class alpha vector.\n\n3. **Oversampling class 2** during training (SMOTE-like or simple repeat sampling) could help since only 164/781 samples are severe.\n\n4. **The fallback Path B (mean+std of 6D features)** achieves the RandomForest baseline of 0.565 when properly implemented with class-weighted loss. This is actually BETTER than the current MotionCLIP approach, suggesting we should try it seriously.\n\n5. **Handcrafted gait features** (velocity, asymmetry, stride frequency) are likely more discriminative for PD severity than generic MotionCLIP embeddings trained on diverse motions. The prompt should push toward physics-informed features.\n\n6. **The attention pooling in multi-window extraction is untrainable** because it's inside `@torch.no_grad()`. Either train it separately or use simple mean/max pooling.\n\n7. **SVM with RBF kernel or gradient boosting** on handcrafted features likely outperforms MLP on this small dataset (781 samples, 23 subjects).\n\nThe new prompt explicitly:\n- Mandates using class weights in the loss function (the #1 bug fix)\n- Recommends SMOTE/oversampling for class 2\n- Pushes toward handcrafted gait features as an alternative/complement\n- Warns about the untrainable attention pooling bug\n- Recommends sklearn classifiers (SVM, GBM) for small datasets\n- Provides concrete code patterns for weighted loss and oversampling",
+  "error_msg": null,
+  "timestamp": "2026-04-06T15:01:58.379167",
+  "llm_cost": 0.0032214,
+  "llm_model": null
+}

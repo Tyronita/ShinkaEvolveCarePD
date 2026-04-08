@@ -1,0 +1,14 @@
+{
+  "generation": 5,
+  "novelty_attempt": 1,
+  "resample_attempt": 1,
+  "patch_attempt": 1,
+  "success": true,
+  "num_applied": 1,
+  "patch_name": "motionclip_aggregated",
+  "patch_description": "Completely restructures the program to use a multi-window temporal aggregation strategy with MotionCLIP. Instead of extracting a single 60-frame center crop per walk, we slide a 60-frame window across each walk with 50% overlap and extract MotionCLIP features from each window. These features are then temporally pooled using learnable attention weights to produce a single walk-level embedding. This captures more temporal information from long walking bouts while maintaining the benefits of pretrained MotionCLIP features.\n\nKey architectural changes:\n1. Multi-window feature extraction instead of single center crop\n2. Attention-based temporal pooling with learnable weights\n3. Integrated end-to-end training (no separate feature extraction phase)\n4. Proper handling of variable-length sequences through padding and masking\n5. Use of official CARE-PD utilities instead of inlined implementations\n\nThis structure better captures gait patterns across entire walks, especially important for longer sequences, and gives the model attention mechanisms to focus on the most discriminative temporal segments.",
+  "error_msg": null,
+  "timestamp": "2026-04-06T12:44:12.076781",
+  "llm_cost": 0.0010222,
+  "llm_model": null
+}

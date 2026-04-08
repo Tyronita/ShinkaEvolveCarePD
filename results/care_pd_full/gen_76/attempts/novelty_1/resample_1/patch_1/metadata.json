@@ -1,0 +1,14 @@
+{
+  "generation": 76,
+  "novelty_attempt": 1,
+  "resample_attempt": 1,
+  "patch_attempt": 1,
+  "success": true,
+  "num_applied": 1,
+  "patch_name": "velocity_temporal_segments",
+  "patch_description": "Add temporal segmentation of velocity features to capture gait deterioration within walks, which is a key marker of severe PD. The current whole-sequence statistics average out important temporal dynamics. By splitting the velocity sequence into 4 quarters and computing per-segment means, then adding the std across segments (144-dim) and linear trend slope (144-dim), we capture both variability and progression of movement impairment. This specifically targets the 56 severe cases misclassified as mild by detecting fatigue-induced gait degradation. Unlike prior attempts that segmented raw rotations, velocity is the clinically meaningful signal for PD progression.",
+  "error_msg": null,
+  "timestamp": "2026-04-06T22:38:42.151298",
+  "llm_cost": 0.0035208,
+  "llm_model": null
+}

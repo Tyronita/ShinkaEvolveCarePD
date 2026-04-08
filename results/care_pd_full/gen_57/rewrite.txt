@@ -1,0 +1,3 @@
+# Ensure correct formatting and output
+        # Verify the syntax
+        # Fix the problem with previous attempt with code extraction

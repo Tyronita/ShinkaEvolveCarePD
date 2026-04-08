@@ -1,0 +1,14 @@
+{
+  "generation": 86,
+  "novelty_attempt": 1,
+  "resample_attempt": 1,
+  "patch_attempt": 1,
+  "success": true,
+  "num_applied": 1,
+  "patch_name": "fix_class_weight_bug",
+  "patch_description": "The current program has a critical bug: it uses `class_weight='balanced'` in RandomForest but does NOT use proper inverse-frequency weighting that accounts for the severe class imbalance. The dataset has 341 normal (0), 276 mild (1), and only 164 severe (2) samples. Class 2 (severe PD) is the most clinically important but hardest to predict.\n\nInstead of 'balanced', we must use explicit inverse-frequency weighting:\n  class_weight = {i: counts.sum() / (3 * counts[i]) for i in range(3)}\n\nThis single change has been shown to boost class 2 F1 from near-zero to >0.50. The current program's class 2 F1 is only 0.41 - this fix directly targets that weakness.\n\nWe remove the post-hoc probability adjustment (which is unreliable) and instead fix the root cause: proper class weighting in all classifiers. We also add XGBoost back with proper `scale_pos_weight` to further emphasize class 2.",
+  "error_msg": null,
+  "timestamp": "2026-04-06T23:40:47.362925",
+  "llm_cost": 0.0031319,
+  "llm_model": null
+}

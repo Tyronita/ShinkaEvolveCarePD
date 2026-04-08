@@ -1,0 +1,14 @@
+{
+  "generation": 75,
+  "novelty_attempt": 1,
+  "resample_attempt": 1,
+  "patch_attempt": 1,
+  "success": true,
+  "num_applied": 1,
+  "patch_name": "gait_feature_ensemble_v2",
+  "patch_description": "Based on the performance analysis of prior programs, I've identified that the key bottleneck is severe PD class under-prediction (class 2 F1=0.45). The winning approach (0.6356 macro-F1) uses a handcrafted 1389-dim feature vector with RF+GB ensemble. I'm enhancing the current program by:\n\n1. Adding proven severe-PD discriminative features:\n   - Trunk sway (pelvis lateral rotation variance)\n   - Jerk features for pelvis/hips/ankles\n   - Pelvis-ankle cross-correlation\n   - ROM for all lower-body joints\n   These directly address the 40 severe\u2192normal and 58 severe\u2192mild misclassifications.\n\n2. Keeping the exact winning architecture:\n   - RF(300 trees, min_samples_leaf=2, inverse-frequency class_weight)\n   - GB(200 trees, max_depth=4, lr=0.05, subsample=0.8)\n   - Soft-voting ensemble without calibration (calibration hurt performance in top runs)\n\n3. Preserving the exact feature extraction code from the 0.6356-scoring program, which uses the optimal 1389-dim feature set with 9 categories including global rotation stats, velocity/acceleration, L-R asymmetry, and FFT features.\n\nThe changes focus on adding the most discriminative features for severe PD while maintaining the proven ensemble structure that maximizes macro-F1.",
+  "error_msg": null,
+  "timestamp": "2026-04-06T22:19:44.139146",
+  "llm_cost": 0.003824,
+  "llm_model": null
+}

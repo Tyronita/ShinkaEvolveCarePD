@@ -1,0 +1,163 @@
+Looking at the performance metrics, the critical issue is clear: **class 2 (severe PD) achieves F1=0.00** despite being the most clinically important class. The confusion matrix shows 132/164 severe cases are misclassified as class 0. The root cause is that the class weights `w` are computed but **never passed to the loss function**.
+
+The fix is straightforward: replace `FocalLoss` with `nn.CrossEntropyLoss(weight=w)` which properly uses the computed inverse-frequency weights. Additionally, I'll improve the classifier architecture and training to better handle the severe imbalance.
+
+<NAME>
+fix_class_weights_and_improve_classifier
+</NAME>
+
+<DESCRIPTION>
+The critical bug: class weights `w` are computed (inverse frequency) but never passed to FocalLoss, which uses a scalar alpha=0.25 treating all classes equally. This causes class 2 (severe PD, fewest samples) to get F1=0.00.
+
+Fix: Replace FocalLoss with nn.CrossEntropyLoss(weight=w) to properly upweight the minority class. Also:
+1. Increase epochs to 300 for better convergence with weighted loss
+2. Add label smoothing to reduce overconfidence on majority classes
+3. Use a deeper MLP with batch norm for better feature learning
+4. Add oversampling of minority class during training batches
+</DESCRIPTION>
+
+<DIFF>
+<<<<<<< SEARCH
+def train_classifier(feat_train: np.ndarray, y_train: np.ndarray,
+                     feat_test:  np.ndarray,
+                     epochs: int = 150, lr: float = 1e-3) -> np.ndarray:
+    """
+    Train ClassifierMLP on precomputed MotionCLIP features.
+
+    Class weights computed from training label distribution to handle imbalance.
+    Uses FocalLoss + AdamW + cosine LR schedule.
+
+    Mutable: epochs, lr, batch_size, loss function, optimizer, schedule.
+    """
+    n_cls   = 3
+    counts  = np.bincount(y_train, minlength=n_cls).astype(float)
+    counts  = np.where(counts == 0, 1.0, counts)
+    # Class weights: inverse frequency, normalized
+    w       = torch.tensor(counts.sum() / (n_cls * counts), dtype=torch.float32).to(DEVICE)
+
+    clf  = ClassifierMLP(in_dim=feat_train.shape[1], n_classes=n_cls).to(DEVICE)
+    opt  = optim.AdamW(clf.parameters(), lr=lr, weight_decay=1e-3)
+    loss_fn = FocalLoss(alpha=0.25, gamma=2.0)
+    sch  = optim.lr_scheduler.CosineAnnealingLR(opt, T_max=epochs)
+
+    X_tr = torch.from_numpy(feat_train.astype(np.float32)).to(DEVICE)
+    y_tr = torch.tensor(y_train, dtype=torch.long).to(DEVICE)
+    X_te = torch.from_numpy(feat_test.astype(np.float32)).to(DEVICE)
+
+    N, bs = len(X_tr), 64
+    clf.train()
+    for _ in range(epochs):
+        perm = torch.randperm(N)
+        for s in range(0, N, bs):
+            b = perm[s:s + bs]
+            opt.zero_grad()
+            loss_fn(clf(X_tr[b]), y_tr[b]).backward()
+            opt.step()
+        sch.step()
+
+    clf.eval()
+    with torch.no_grad():
+        return clf(X_te).argmax(1).cpu().numpy()
+=======
+def train_classifier(feat_train: np.ndarray, y_train: np.ndarray,
+                     feat_test:  np.ndarray,
+                     epochs: int = 300, lr: float = 1e-3) -> np.ndarray:
+    """
+    Train ClassifierMLP on precomputed MotionCLIP features.
+
+    Class weights computed from training label distribution to handle imbalance.
+    Uses weighted CrossEntropyLoss + AdamW + cosine LR schedule.
+    Oversamples minority classes to ensure balanced batches.
+
+    Mutable: epochs, lr, batch_size, loss function, optimizer, schedule.
+    """
+    n_cls   = 3
+    counts  = np.bincount(y_train, minlength=n_cls).astype(float)
+    counts  = np.where(counts == 0, 1.0, counts)
+    # Class weights: inverse frequency, normalized — ACTUALLY USED in loss
+    w       = torch.tensor(counts.sum() / (n_cls * counts), dtype=torch.float32).to(DEVICE)
+
+    clf  = ClassifierMLP(in_dim=feat_train.shape[1], n_classes=n_cls).to(DEVICE)
+    opt  = optim.AdamW(clf.parameters(), lr=lr, weight_decay=1e-3)
+    # Use weighted CrossEntropyLoss with label smoothing to handle class imbalance
+    loss_fn = nn.CrossEntropyLoss(weight=w, label_smoothing=0.1)
+    sch  = optim.lr_scheduler.CosineAnnealingLR(opt, T_max=epochs)
+
+    X_tr = torch.from_numpy(feat_train.astype(np.float32)).to(DEVICE)
+    y_tr = torch.tensor(y_train, dtype=torch.long).to(DEVICE)
+    X_te = torch.from_numpy(feat_test.astype(np.float32)).to(DEVICE)
+
+    # Build per-sample weights for oversampling minority classes
+    sample_weights = np.array([1.0 / counts[y] for y in y_train])
+    sample_weights = sample_weights / sample_weights.sum()
+
+    N, bs = len(X_tr), 32
+    clf.train()
+    for _ in range(epochs):
+        # Oversample using per-sample weights to balance classes in each batch
+        indices = np.random.choice(N, size=N, replace=True, p=sample_weights)
+        perm = torch.from_numpy(indices).long()
+        for s in range(0, N, bs):
+            b = perm[s:s + bs]
+            opt.zero_grad()
+            loss_fn(clf(X_tr[b]), y_tr[b]).backward()
+            opt.step()
+        sch.step()
+
+    clf.eval()
+    with torch.no_grad():
+        return clf(X_te).argmax(1).cpu().numpy()
+>>>>>>> REPLACE
+
+</DIFF>
+
+<DIFF>
+<<<<<<< SEARCH>
+class ClassifierMLP(nn.Module):
+    """
+    Shallow MLP on top of frozen MotionCLIP embeddings.
+    Mutable: depth, width, dropout, activation, batch norm, residual connections.
+    """
+    def __init__(self, in_dim: int = 512, n_classes: int = 3, dropout: float = 0.3):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(in_dim, 256), nn.GELU(), nn.Dropout(dropout),
+            nn.Linear(256, 128),   nn.GELU(), nn.Dropout(0.2),
+            nn.Linear(128, n_classes),
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.net(x)
+=======
+class ClassifierMLP(nn.Module):
+    """
+    MLP on top of frozen MotionCLIP embeddings with batch norm and residual.
+    Mutable: depth, width, dropout, activation, batch norm, residual connections.
+    """
+    def __init__(self, in_dim: int = 512, n_classes: int = 3, dropout: float = 0.3):
+        super().__init__()
+        self.fc1 = nn.Linear(in_dim, 512)
+        self.bn1 = nn.BatchNorm1d(512)
+        self.fc2 = nn.Linear(512, 256)
+        self.bn2 = nn.BatchNorm1d(256)
+        self.fc3 = nn.Linear(256, 128)
+        self.bn3 = nn.BatchNorm1d(128)
+        self.fc4 = nn.Linear(128, n_classes)
+        self.drop1 = nn.Dropout(dropout)
+        self.drop2 = nn.Dropout(0.2)
+        self.act = nn.GELU()
+        # Residual projection from input to hidden
+        self.res_proj = nn.Linear(in_dim, 256)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # Handle single-sample inference (BatchNorm needs >1 sample in train mode)
+        h1 = self.drop1(self.act(self.bn1(self.fc1(x))))
+        h2 = self.act(self.bn2(self.fc2(h1)))
+        # Residual connection
+        res = self.res_proj(x)
+        h2 = self.drop2(h2 + res)
+        h3 = self.act(self.bn3(self.fc3(h2)))
+        return self.fc4(h3)
+>>>>>>> REPLACE
+
+</DIFF>
