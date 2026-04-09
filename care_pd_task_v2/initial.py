@@ -708,11 +708,12 @@ def ensemble_vote(*pred_arrays):
 # ===========================================================================
 
 
-def run_evaluation(data: dict, folds: dict, care_pd_dir: str = None) -> dict:
+def run_evaluation(data: dict, folds: dict, care_pd_dir: str = None, aux_data: dict = None) -> dict:
     """
     6-fold subject-level cross-validation harness. FIXED — do not modify.
     Dispatches to the method selected by METHOD variable in EVOLVE-BLOCK.
-    Prints comparison table vs baseline after each fold and in summary.
+    Test set: BMCLab only. Training set: BMCLab fold + all aux_data walks.
+    aux_data = {"T-SDU-PD": {...}, "PD-GaM": {...}, "3DGait": {...}} (class3→2 remapped).
     """
     SEP = '─' * 72
     BASE = {'m': 0.565, 'c0': 0.702, 'c1': 0.495, 'c2': 0.497}
@@ -720,6 +721,9 @@ def run_evaluation(data: dict, folds: dict, care_pd_dir: str = None) -> dict:
     print(f'  CARE-PD 6-fold CV  |  method={METHOD}  device={DEVICE}')
     print(f'  Baseline (RF):  macro={BASE["m"]:.3f}  '
           f'c0={BASE["c0"]:.3f}  c1={BASE["c1"]:.3f}  c2={BASE["c2"]:.3f}')
+    if aux_data:
+        n_aux = sum(sum(len(s) for s in d.values()) for d in aux_data.values())
+        print(f'  Aux training data: {n_aux} walks from {list(aux_data.keys())}')
     print(SEP)
 
     all_preds, all_labels = [], []
@@ -733,10 +737,22 @@ def run_evaluation(data: dict, folds: dict, care_pd_dir: str = None) -> dict:
                 for wd in data[sub].values():
                     poses.append(wd['pose'].astype(np.float32))
                     labs.append(int(wd['UPDRS_GAIT']))
-            return poses, np.array(labs, dtype=np.int64)
+            return poses, labs
 
-        tr_poses, y_tr = get_data(split['train'])
-        te_poses, y_te = get_data(split['eval'])
+        tr_poses, y_tr_list = get_data(split['train'])
+        te_poses, y_te_list = get_data(split['eval'])
+
+        # Augment training set with all aux dataset walks (test stays BMCLab only)
+        if aux_data:
+            for ds_name, ds_dict in aux_data.items():
+                for subj in ds_dict.values():
+                    for wd in subj.values():
+                        if wd.get('UPDRS_GAIT') is not None:
+                            tr_poses.append(wd['pose'].astype(np.float32))
+                            y_tr_list.append(int(wd['UPDRS_GAIT']))
+
+        y_tr = np.array(y_tr_list, dtype=np.int64)
+        y_te = np.array(y_te_list, dtype=np.int64)
 
         if not te_poses or len(np.unique(y_tr)) < 2:
             print(f'  fold {fold_id}: SKIPPED')

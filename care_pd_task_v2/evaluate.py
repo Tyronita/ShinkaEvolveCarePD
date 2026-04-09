@@ -49,6 +49,9 @@ _FOLDS    = os.path.join(
 _TASK_DIR        = _find_dir("care_pd_task_v2", _HERE)
 _LEADERBOARD_CSV = os.path.join(_TASK_DIR, "leaderboard.csv")
 
+# Auxiliary UPDRS-labeled datasets for extra training data (test is always BMCLab only)
+_AUX_DATASETS = ["T-SDU-PD", "PD-GaM", "3DGait"]
+
 _LEADERBOARD_COLS = [
     "timestamp_utc", "genome_id", "program_path",
     "macro_f1", "f1_class0", "f1_class1", "f1_class2",
@@ -159,6 +162,31 @@ def main(program_path: str, results_dir: str):
         folds = pickle.load(f)
     print(f"[evaluate] {_dataset_summary(data, folds)}")
 
+    # ── Auxiliary UPDRS datasets (extra training data, test stays BMCLab) ────
+    aux_data = {}
+    ds_root = os.path.join(_CARE_PD, "assets", "datasets")
+    for ds_name in _AUX_DATASETS:
+        pkl_path = os.path.join(ds_root, f"{ds_name}.pkl")
+        if not os.path.exists(pkl_path):
+            print(f"[evaluate] aux {ds_name}: NOT FOUND (skipping)")
+            continue
+        with open(pkl_path, "rb") as f:
+            ds = pickle.load(f)
+        # Remap 4-class labels → 3-class: class 3 (very severe) → class 2 (severe)
+        n_walks = n_remapped = 0
+        for subj in ds.values():
+            for wd in subj.values():
+                if wd.get("UPDRS_GAIT") is not None:
+                    if int(wd["UPDRS_GAIT"]) == 3:
+                        wd["UPDRS_GAIT"] = 2
+                        n_remapped += 1
+                    n_walks += 1
+        aux_data[ds_name] = ds
+        print(f"[evaluate] aux {ds_name}: {n_walks} walks  (remapped class3→2: {n_remapped})")
+    if aux_data:
+        total_aux = sum(sum(len(s) for s in d.values()) for d in aux_data.values())
+        print(f"[evaluate] aux total: {total_aux} extra training walks from {list(aux_data.keys())}")
+
     # ── Checkpoints ──────────────────────────────────────────────────────────
     print(f"[evaluate] Pretrained checkpoints:")
     print(_checkpoint_inventory())
@@ -183,9 +211,12 @@ def main(program_path: str, results_dir: str):
     print(f"[evaluate] Running run_evaluation()...", flush=True)
     t_eval = time.perf_counter()
     try:
-        result = mod.run_evaluation(data=data, folds=folds, care_pd_dir=_CARE_PD)
+        result = mod.run_evaluation(data=data, folds=folds, care_pd_dir=_CARE_PD, aux_data=aux_data)
     except TypeError:
-        result = mod.run_evaluation(data=data, folds=folds)
+        try:
+            result = mod.run_evaluation(data=data, folds=folds, care_pd_dir=_CARE_PD)
+        except TypeError:
+            result = mod.run_evaluation(data=data, folds=folds)
     except Exception:
         err = traceback.format_exc()
         print(f"[evaluate] RUN_EVALUATION FAILED after {time.perf_counter()-t_eval:.2f}s")
