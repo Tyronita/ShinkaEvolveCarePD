@@ -1,0 +1,230 @@
+Looking at the current performance (macro=0.60, c2=0.51) with RF as the method, I need to think about what could push this higher.
+
+Key observations:
+1. RF is currently scoring 0.60 (slightly above the 0.596 baseline noted in comments)
+2. The confusion matrix shows class 0 is being over-predicted (460 predicted vs 341 actual)
+3. Class 2 (severe PD) has 74 correct out of 164, with 55 misclassified as class 0
+4. The biggest opportunity is improving class 2 recall
+
+My strategy: **Enhance the RF feature set with clinically-motivated features** that better capture severe PD characteristics:
+1. **Velocity statistics** (mean/std of temporal diffs) - bradykinesia is primary in severe PD
+2. **Range of motion** (max-min per joint) - shortened stride in severe PD
+3. **LR asymmetry statistics** - more pronounced in severe PD
+4. **FFT frequency features** on lower-body joints - freezing of gait signature
+5. **Acceleration statistics** - jerkiness in severe PD
+
+This keeps the RF method (which is fast and reliable) but dramatically enriches the feature vector from 288-dim to ~800+ dims, giving the forest more discriminative signal for class 2.
+
+<NAME>
+enhanced_rf_features_clinical
+</NAME>
+
+<DESCRIPTION>
+Enhance the RandomForest feature set with clinically-motivated features beyond just mean+std of 6D rotations. Adding:
+1. Velocity (temporal diff) mean/std - captures bradykinesia (primary severe PD marker)
+2. Range of motion (max-min) per joint - captures shortened stride and reduced arm swing
+3. LR asymmetry mean/std - captures the asymmetric presentation of PD
+4. Acceleration (2nd diff) mean/std - captures tremor and jerkiness
+5. FFT power in tremor band (4-8Hz at 30fps) and stride band (0.5-2Hz) for lower-body joints
+6. Percentile features (25th, 75th) for more robust statistics
+
+These features directly correspond to the clinical PD biomarkers listed in the task description and should significantly improve class 2 (severe PD) discrimination.
+</DESCRIPTION>
+
+<DIFF>
+<<<<<<< SEARCH>
+def rf_features(pose: np.ndarray) -> np.ndarray:
+    """
+    Aggregate (T, 144) 6D rotations to fixed-size vector via mean+std.
+    Returns: (288,) float32.
+    Mutable: add median, range, velocity mean/std, FFT stats.
+    """
+    r = smpl_to_6d(pose)  # (T, 144)
+    return np.concatenate([r.mean(0), r.std(0)]).astype(np.float32)  # (288,)
+
+
+def train_rf_fold(tr_poses, y_tr, te_poses):
+    """
+    Train RandomForest on mean+std features. Returns predictions.
+    CONFIRMED SCORE: macro_f1=0.565, c0=0.702, c1=0.495, c2=0.497 (6-fold CV).
+    Mutable: n_estimators, max_depth, class_weight, feature set.
+    """
+    from sklearn.ensemble import RandomForestClassifier
+    X_tr = np.stack([rf_features(p) for p in tr_poses])
+    X_te = np.stack([rf_features(p) for p in te_poses])
+    # WHY class_weight=balanced_subsample: handles class imbalance + bootstrap
+    clf = RandomForestClassifier(
+        n_estimators=300, max_depth=None,
+        class_weight='balanced_subsample', n_jobs=-1, random_state=42)
+    clf.fit(X_tr, y_tr)
+    return clf.predict(X_te)
+=======
+def rf_features(pose: np.ndarray) -> np.ndarray:
+    """
+    Aggregate (T, 144) 6D rotations + velocity + ROM + asymmetry + FFT to fixed-size vector.
+    WHY: Richer feature set captures multiple PD biomarkers simultaneously.
+    Returns: ~900+ dim float32 vector.
+    """
+    fps = 30.0
+    r = smpl_to_6d(pose)  # (T, 144)
+    T = len(r)
+
+    # --- Basic rotation statistics ---
+    # WHY: baseline features, keep for continuity
+    feat_mean = r.mean(0)   # (144,)
+    feat_std  = r.std(0)    # (144,)
+
+    # --- Velocity (1st temporal diff): captures bradykinesia ---
+    # WHY: Reduced movement speed is PRIMARY symptom of severe PD (bradykinesia)
+    vel = np.diff(r, axis=0)  # (T-1, 144)
+    vel_mean = vel.mean(0)    # (144,)
+    vel_std  = vel.std(0)     # (144,)
+    vel_abs_mean = np.abs(vel).mean(0)  # (144,) mean speed
+
+    # --- Acceleration (2nd temporal diff): captures tremor and jerkiness ---
+    # WHY: Tremor (4-8Hz oscillations) and freezing-of-gait show as high acceleration variance
+    if T > 2:
+        acc = np.diff(vel, axis=0)  # (T-2, 144)
+        acc_std = acc.std(0)        # (144,) jerkiness
+        acc_abs_mean = np.abs(acc).mean(0)  # (144,)
+    else:
+        acc_std = np.zeros(144, dtype=np.float32)
+        acc_abs_mean = np.zeros(144, dtype=np.float32)
+
+    # --- Range of Motion: max-min per joint channel ---
+    # WHY: Shortened stride = reduced hip/knee ROM; reduced arm swing = reduced shoulder/elbow ROM
+    # These are key clinical markers distinguishing mild vs severe PD
+    rom = r.max(0) - r.min(0)  # (144,)
+
+    # --- Percentile features for robustness ---
+    # WHY: Outlier-robust statistics better handle occasional pose estimation errors
+    p25 = np.percentile(r, 25, axis=0)  # (144,)
+    p75 = np.percentile(r, 75, axis=0)  # (144,)
+    iqr = p75 - p25                      # (144,) interquartile range
+
+    # --- Left-Right Asymmetry statistics ---
+    # WHY: PD asymmetry (one side more affected) is PRIMARY diagnostic criterion
+    # Severe PD shows larger and more variable asymmetry
+    r_joints = r.reshape(T, 24, 6)
+    L_idx = np.array([p[0] for p in LR_PAIRS])  # [1,4,7,10,13,16,18,20,22]
+    R_idx = np.array([p[1] for p in LR_PAIRS])  # [2,5,8,11,14,17,19,21,23]
+    asym = np.abs(r_joints[:, L_idx, :] - r_joints[:, R_idx, :]).reshape(T, 54)  # (T, 54)
+    asym_mean = asym.mean(0)  # (54,) mean asymmetry
+    asym_std  = asym.std(0)   # (54,) asymmetry variability
+    asym_max  = asym.max(0)   # (54,) peak asymmetry
+
+    # --- FFT frequency band features on lower-body joints ---
+    # WHY: Freezing of gait → high-frequency power at ankles (joints 7,8)
+    #      Tremor → 4-8 Hz oscillations at wrists/hands (joints 20-23)
+    #      Stride rhythm → 0.5-2 Hz at hips/knees (joints 1,2,4,5)
+    # Lower-body joints: pelvis(0), hips(1,2), knees(4,5), ankles(7,8) → indices 0-11,24-35,42-47
+    lower_joints = [0, 1, 2, 4, 5, 7, 8]  # pelvis, hips, knees, ankles
+    lower_idx = []
+    for j in lower_joints:
+        lower_idx.extend(range(j*6, j*6+6))
+    lower_r = r[:, lower_idx]  # (T, 42)
+
+    fft_feats = []
+    if T >= 8:
+        freqs = np.fft.rfftfreq(T, d=1.0/fps)  # frequency bins in Hz
+        fft_mag = np.abs(np.fft.rfft(lower_r, axis=0))  # (T//2+1, 42)
+
+        # Stride band: 0.5-2 Hz (normal gait cadence)
+        stride_mask = (freqs >= 0.5) & (freqs <= 2.0)
+        # Tremor band: 4-8 Hz (PD rest tremor)
+        tremor_mask = (freqs >= 4.0) & (freqs <= 8.0)
+        # Freeze band: 8-15 Hz (freezing of gait high-freq)
+        freeze_mask = (freqs >= 8.0) & (freqs <= 15.0)
+
+        stride_power = fft_mag[stride_mask].mean(0) if stride_mask.any() else np.zeros(lower_r.shape[1])
+        tremor_power = fft_mag[tremor_mask].mean(0) if tremor_mask.any() else np.zeros(lower_r.shape[1])
+        freeze_power = fft_mag[freeze_mask].mean(0) if freeze_mask.any() else np.zeros(lower_r.shape[1])
+        # Ratio: tremor/stride power — elevated in severe PD
+        ratio_power  = tremor_power / (stride_power + 1e-8)
+
+        fft_feats = [stride_power, tremor_power, freeze_power, ratio_power]
+    else:
+        fft_feats = [np.zeros(len(lower_idx)) for _ in range(4)]
+
+    # --- Upper-body arm swing features ---
+    # WHY: Reduced arm swing is hallmark of PD; severe PD shows near-zero shoulder/elbow ROM
+    arm_joints = [16, 17, 18, 19]  # L/R shoulder, L/R elbow
+    arm_idx = []
+    for j in arm_joints:
+        arm_idx.extend(range(j*6, j*6+6))
+    arm_r = r[:, arm_idx]  # (T, 24)
+    arm_rom = arm_r.max(0) - arm_r.min(0)  # (24,) arm ROM
+    arm_vel_std = np.diff(arm_r, axis=0).std(0) if T > 1 else np.zeros(24)  # (24,)
+
+    # --- Spine posture features ---
+    # WHY: Stooped posture (spine flexion) is characteristic of severe PD
+    spine_joints = [3, 6, 9]  # spine1, spine2, spine3
+    spine_idx = []
+    for j in spine_joints:
+        spine_idx.extend(range(j*6, j*6+6))
+    spine_r = r[:, spine_idx]  # (T, 18)
+    spine_mean = spine_r.mean(0)  # (18,) mean posture offset
+    spine_std  = spine_r.std(0)   # (18,) posture variability
+
+    # --- Concatenate all features ---
+    all_feats = np.concatenate([
+        feat_mean,      # 144 — rotation mean
+        feat_std,       # 144 — rotation std
+        vel_mean,       # 144 — velocity mean (bradykinesia)
+        vel_std,        # 144 — velocity std
+        vel_abs_mean,   # 144 — mean speed
+        acc_std,        # 144 — acceleration std (tremor/jerk)
+        acc_abs_mean,   # 144 — mean acceleration magnitude
+        rom,            # 144 — range of motion (stride length proxy)
+        iqr,            # 144 — interquartile range (robust spread)
+        asym_mean,      # 54  — mean LR asymmetry
+        asym_std,       # 54  — asymmetry variability
+        asym_max,       # 54  — peak asymmetry
+        fft_feats[0],   # 42  — stride band power
+        fft_feats[1],   # 42  — tremor band power
+        fft_feats[2],   # 42  — freeze band power
+        fft_feats[3],   # 42  — tremor/stride ratio
+        arm_rom,        # 24  — arm swing ROM
+        arm_vel_std,    # 24  — arm velocity variability
+        spine_mean,     # 18  — spine posture
+        spine_std,      # 18  — spine variability
+    ]).astype(np.float32)
+
+    return all_feats
+
+
+def train_rf_fold(tr_poses, y_tr, te_poses):
+    """
+    Train RandomForest on enhanced clinical features. Returns predictions.
+    WHY enhanced features: captures bradykinesia, asymmetry, ROM, tremor, posture.
+    Mutable: n_estimators, max_depth, class_weight, feature set.
+    """
+    from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
+    from sklearn.preprocessing import StandardScaler
+
+    X_tr = np.stack([rf_features(p) for p in tr_poses])
+    X_te = np.stack([rf_features(p) for p in te_poses])
+
+    # WHY handle NaN/Inf: FFT or diff on very short sequences can produce edge cases
+    X_tr = np.nan_to_num(X_tr, nan=0.0, posinf=0.0, neginf=0.0)
+    X_te = np.nan_to_num(X_te, nan=0.0, posinf=0.0, neginf=0.0)
+
+    print(f'  [RF] feature_dim={X_tr.shape[1]}  train={len(y_tr)}  '
+          f'dist={{0:{(y_tr==0).sum()},1:{(y_tr==1).sum()},2:{(y_tr==2).sum()}}}')
+
+    # WHY class_weight=balanced_subsample: handles class imbalance + bootstrap
+    # WHY n_estimators=500: more trees = lower variance, marginal cost on CPU
+    # WHY min_samples_leaf=2: prevents overfitting on small class-2 subset
+    clf = RandomForestClassifier(
+        n_estimators=500,
+        max_depth=None,
+        min_samples_leaf=2,
+        max_features='sqrt',
+        class_weight='balanced_subsample',
+        n_jobs=-1,
+        random_state=42)
+    clf.fit(X_tr, y_tr)
+    return clf.predict(X_te)
+>>>>>>> REPLACE
+
+</DIFF>

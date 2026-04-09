@@ -1,0 +1,14 @@
+{
+  "generation": 2,
+  "novelty_attempt": 1,
+  "resample_attempt": 1,
+  "patch_attempt": 1,
+  "success": false,
+  "num_applied": 0,
+  "patch_name": "enhanced_rf_features_clinical",
+  "patch_description": "Enhance the RandomForest feature set with clinically-motivated features beyond just mean+std of 6D rotations. Adding:\n1. Velocity (temporal diff) mean/std - captures bradykinesia (primary severe PD marker)\n2. Range of motion (max-min) per joint - captures shortened stride and reduced arm swing\n3. LR asymmetry mean/std - captures the asymmetric presentation of PD\n4. Acceleration (2nd diff) mean/std - captures tremor and jerkiness\n5. FFT power in tremor band (4-8Hz at 30fps) and stride band (0.5-2Hz) for lower-body joints\n6. Percentile features (25th, 75th) for more robust statistics\n\nThese features directly correspond to the clinical PD biomarkers listed in the task description and should significantly improve class 2 (severe PD) discrimination.",
+  "error_msg": "No changes applied",
+  "timestamp": "2026-04-06T16:59:15.492610",
+  "llm_cost": 0.115371,
+  "llm_model": null
+}

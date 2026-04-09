@@ -1,0 +1,81 @@
+# INDIVIDUAL PROGRAM SUMMARIES
+
+The following are summaries of individual programs evaluated since the last meta update:
+
+**Program Name: Random Forest UPDRS Gait Classification with 6D Rotation Features**
+- **Implementation**: Uses RandomForest (300 trees, balanced_subsample class weighting) on fixed-length 288-dim feature vectors computed as mean+std of 6D rotation representations (converted from SMPL axis-angle) across all frames, with subject-level 6-fold cross-validation.
+- **Performance**: Achieved macro_F1=0.60 (c0=0.74, c1=0.54, c2=0.51), exceeding the confirmed RF baseline of 0.565 by +0.03 delta.
+- **Feedback**: The RF method reliably outperforms neural approaches (1D-CNN scored 0.42-0.46) on this small 620-sample dataset; fold 1 shows notably low performance (0.40) suggesting subject-level variance, while class-2 severe PD recall remains the primary challenge with prediction distribution skewed toward class 0 (460 predicted vs 341 actual).
+**Program Identifier:** Generation 0 - Patch Name initial_program - Correct Program: True
+
+**Program Name: Bidirectional LSTM with Enhanced Gait Features for PD Classification**
+- **Implementation**: Uses a bidirectional LSTM with attention-based pooling on 486-dimensional per-frame features combining 6D rotations, velocity, acceleration, left-right asymmetry, and range-of-motion statistics, with adaptive z-score normalization and weighted cross-entropy loss for class imbalance.
+- **Performance**: Combined score of 0.0, indicating the program failed validation entirely despite the sophisticated architecture.
+- **Feedback**: The program defines a `METHOD` variable referenced in `run_evaluation` but never assigns it in the evolve block, causing a `NameError` at runtime; additionally, helper functions like `train_rf_fold`, `train_cnn_fold`, `train_motionclip_fold`, and `ensemble_vote` are referenced but never defined, making the dispatch logic non-functional.
+**Program Identifier:** Generation 1 - Patch Name none - Correct Program: False
+
+**Program Name: Enhanced Random Forest with Clinical PD Gait Features**
+- **Implementation**: Uses a RandomForest classifier (500 trees, balanced_subsample) with a rich 1,692-dimensional feature vector per walk, aggregating 6D rotation statistics (mean, std, ROM, IQR), velocity/acceleration features, left-right asymmetry metrics, FFT frequency band power (stride 0.5-2Hz, tremor 4-8Hz, freeze 8-15Hz), arm swing ROM, and spine posture features extracted from SMPL axis-angle poses.
+- **Performance**: Achieved macro F1=0.61 (c0=0.77, c1=0.55, c2=0.50), a +0.04 improvement over the RF baseline of 0.565, with fold 1 notably underperforming at 0.384.
+- **Feedback**: The enhanced clinical feature engineering (FFT bands, asymmetry, ROM) provided meaningful gains over the simple mean+std baseline; fold 1 remains a weak point likely due to subject distribution, and the prediction distribution shows over-prediction of class 0 (426 predicted vs 341 actual) suggesting the classifier still struggles to distinguish mild/severe PD from normal.
+**Program Identifier:** Generation 2 - Patch Name enhanced_rf_features_clinical - Correct Program: True
+
+# GLOBAL INSIGHTS SCRATCHPAD
+
+The following are global insights about optimization approaches and their effectiveness:
+
+# Analysis of Program Evaluation Results
+
+## Successful Algorithmic Patterns
+
+- **Enhanced RF Feature Engineering is the Current Best Approach**: The "Enhanced Random Forest with Clinical PD Gait Features" (Generation 2) achieved macro_F1=0.61 (c0=0.77, c1=0.55, c2=0.50), outperforming the simple RF baseline (0.565) by +0.04. The key improvement came from expanding from 288-dim (mean+std of 6D rotations only) to a 1,692-dim feature vector incorporating velocity statistics, acceleration, ROM, IQR, left-right asymmetry, FFT frequency bands, arm swing ROM, and spine posture features.
+
+- **Balanced Subsample Class Weighting with 500 Trees**: Both successful RF programs use `class_weight='balanced_subsample'` with `min_samples_leaf=2`, which prevents overfitting on the small class-2 subset (164 walks). The Generation 0 program with 300 trees scored 0.60; Generation 2 with 500 trees scored 0.61, confirming marginal but consistent gains from more estimators.
+
+- **FFT Frequency Band Features Provide Meaningful Clinical Signal**: The Generation 2 program explicitly computes stride (0.5-2Hz), tremor (4-8Hz), and freeze (8-15Hz) power bands on lower-body joints (pelvis, hips, knees, ankles), plus tremor/stride power ratios. This directly encodes known PD biomarkers and contributed to the +0.04 improvement over the simple baseline.
+
+- **Multi-Scale Temporal Statistics Capture Diverse PD Symptoms**: The best program combines mean, std, velocity mean/std/abs-mean, acceleration std/abs-mean, ROM (max-min), and IQR per joint channel. This multi-scale approach captures bradykinesia (velocity), tremor (acceleration variance), shortened stride (ROM), and movement regularity (IQR) simultaneously.
+
+## Ineffective Approaches
+
+- **Neural Network Approaches Consistently Underperform on This Dataset**: The Generation 1 BiLSTM program failed entirely (score=0.0) due to implementation errors (undefined `METHOD` variable and missing helper functions). Prior benchmark data shows 1D-CNN scored 0.42-0.46 even with z-score normalization, well below the RF baseline of 0.565. The 620-sample dataset is too small for neural approaches to generalize effectively.
+
+- **Single-Crop MotionCLIP Loses Critical Temporal Information**: The benchmark table in the program documentation shows MotionCLIP with a single 60-frame center-crop scored only 0.377 macro_F1 with class-2 F1 collapsing to 0.047. Walks range from 210-3015 frames, meaning a 60-frame crop captures at most 28% of the shortest walk and under 2% of the longest, discarding the majority of gait cycle information.
+
+- **Undefined Variables and Missing Functions Cause Complete Failure**: Generation 1's BiLSTM program scored 0.0 because it referenced `METHOD` without assignment and called undefined helper functions (`train_rf_fold`, `train_cnn_fold`, etc.). This highlights that complex dispatch architectures require all referenced functions to be fully implemented before the evolve block ends.
+
+- **Class Imbalance Without Proper Weighting Skews Predictions Toward Class 0**: Both successful RF programs show over-prediction of class 0 (426 predicted vs 341 actual in Generation 2; 460 vs 341 in Generation 0), indicating that even with `balanced_subsample`, the classifier still has a class-0 bias. This is the primary bottleneck for improving class-1 and class-2 F1 scores.
+
+## Implementation Insights
+
+- **The Current Best Program's Feature Vector Structure**: The 1,692-dim feature vector in Generation 2 is organized as: rotation statistics (144×5 = 720 dims for mean/std/vel_mean/vel_std/vel_abs_mean), acceleration statistics (144×2 = 288 dims), ROM+IQR (144×2 = 288 dims), asymmetry statistics (54×3 = 162 dims), FFT bands (42×4 = 168 dims), arm features (24×2 = 48 dims), and spine features (18×2 = 36 dims). This structured decomposition maps directly to clinical PD biomarkers.
+
+- **NaN/Inf Handling is Critical for Robustness**: The best program explicitly applies `np.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0)` after feature extraction. This is necessary because FFT on very short sequences and temporal differences on edge cases can produce numerical instabilities, particularly for the shortest walks (T as low as 210 frames).
+
+- **Fold 1 Consistently Underperforms Across All Methods**: Fold 1 (test subjects: SUB18, SUB12, SUB01, SUB11, 159 walks) scores 0.384 in Generation 2 and 0.40 in Generation 0, while other folds score 0.535-0.561. This persistent weakness suggests subject-level variance in fold 1's test subjects rather than a methodological issue, as it appears regardless of feature engineering improvements.
+
+- **Subject-Level Cross-Validation Correctly Prevents Data Leakage**: All programs use subject-level splits (not walk-level), which is critical given that each subject contributes ~34 walks on average. Walk-level splits would allow the same subject's gait patterns to appear in both train and test, artificially inflating scores.
+
+## Performance Analysis
+
+- **Consistent +0.04 Improvement Over Baseline Across RF Variants**: Generation 0 (simple RF, 300 trees, 288-dim) scored 0.60 (+0.035 over baseline); Generation 2 (enhanced RF, 500 trees, 1,692-dim) scored 0.61 (+0.04 over baseline). The incremental gain from richer features is real but modest, suggesting diminishing returns from pure feature engineering within the RF framework.
+
+- **Class-2 F1 Remains the Primary Bottleneck**: Generation 2 achieves c2=0.50 vs baseline c2=0.497 (only +0.003 improvement), while c0 improved from 0.702→0.77 (+0.068) and c1 from 0.495→0.55 (+0.055). The enhanced features disproportionately helped classes 0 and 1 but barely moved class-2 performance, despite class-2 being the clinically most important category.
+
+- **Neural Approaches Show 0.12-0.17 Point Deficit vs RF on This Dataset**: The benchmark data shows 1D-CNN with z-normalization at 0.459 vs RF at 0.596, a gap of 0.137 points. This large gap on a 620-sample dataset confirms that the inductive biases of RF (ensemble of decision trees, no gradient optimization) are better suited to this data regime than temporal neural networks.
+
+- **Prediction Distribution Skew Persists Despite Improvements**: Generation 2 predicts class 0 for 426 walks (actual: 341, over-prediction by 25%), class 1 for 225 (actual: 276, under-prediction by 18%), and class 2 for 130 (actual: 164, under-prediction by 21%). This systematic bias toward class 0 is consistent across both RF generations and represents the core challenge for reaching the LOSO SOTA target of 0.68.
+
+# META RECOMMENDATIONS
+
+The following are actionable recommendations for the next program generations:
+
+1. **Add Gradient Boosting (XGBoost/LightGBM) with the Same 1,692-dim Feature Vector**: Replace or augment the RandomForest classifier with XGBoost or LightGBM using the identical `rf_features()` feature vector. Gradient boosting typically outperforms RF on tabular/feature-engineered data by 2-5% F1 because it corrects residual errors iteratively, and LightGBM's `class_weight` parameter handles imbalance similarly to `balanced_subsample`. Use `scale_pos_weight` per class or `is_unbalance=True`, with `n_estimators=500`, `learning_rate=0.05`, `max_depth=6`, `subsample=0.8` to prevent overfitting on the 620-sample dataset.
+
+2. **Add Stride Segmentation Features: Gait Cycle Regularity and Step Symmetry Index**: Extend `rf_features()` with autocorrelation-based stride regularity metrics computed on hip/knee joint channels. Specifically, compute the autocorrelation of pelvis (joint 0) and hip (joints 1,2) rotation channels at lags 15-60 frames (0.5-2s at 30fps), extract the dominant peak lag (= stride period estimate), and compute the stride regularity index (peak autocorrelation value). Also add the coefficient of variation (std/mean) of inter-peak intervals as a freezing-of-gait proxy. These features directly encode gait regularity degradation in severe PD and are orthogonal to the current FFT/ROM features.
+
+3. **Address Class-0 Over-Prediction via Post-Hoc Threshold Calibration on the RF Classifier**: The current RF predicts class 0 for 426 walks vs 341 actual (25% over-prediction), which is the primary bottleneck. After `clf.fit()`, use `clf.predict_proba()` and apply per-class decision thresholds calibrated on the training fold using a held-out validation split (e.g., 10% of training data). Specifically, lower the class-0 threshold from 0.5 to ~0.35-0.40 and raise class-1/class-2 thresholds to ~0.30-0.35, then select the threshold combination maximizing macro-F1 on the validation split. This directly targets the systematic bias identified in the confusion matrix without changing the feature engineering.
+
+4. **Add Temporal Variability Features: Walk-to-Walk Consistency Within Subject is Unavailable, but Frame-to-Frame Jitter Captures Freezing**: Extend `rf_features()` with sliding-window statistics computed over 30-frame (1-second) non-overlapping windows: for each window compute the local ROM and local velocity std, then aggregate the mean, std, min, and max of these local statistics across all windows. This captures within-walk temporal non-stationarity (e.g., a walk that starts normal but freezes mid-way), which global mean/std statistics miss entirely. Add these for pelvis, hip, knee, and ankle joints (7 joints × 6D × 4 stats × 4 aggregates = 672 additional dims), and apply `nan_to_num` for short walks with fewer than 2 windows.
+
+5. **Implement a Stacking Ensemble: RF Predictions as Meta-Features for a Second-Level Classifier**: Use out-of-fold RF probability predictions (3 class probabilities per walk) as meta-features for a second-level LogisticRegression or GradientBoosting classifier. Within each fold, split the training data into 5 inner folds, train RF on 4 inner folds and predict probabilities on the held-out inner fold, accumulating out-of-fold probabilities for all training walks. Then train the meta-classifier on these 3-dim probability vectors (optionally concatenated with the top-20 most important RF features by feature importance). This stacking approach can correct systematic RF biases (like the class-0 over-prediction) by learning a calibrated decision boundary on top of the RF's probability estimates.

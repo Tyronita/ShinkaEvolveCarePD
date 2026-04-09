@@ -144,10 +144,7 @@ def launch_pod(
         "gpuCount":           1,
         "gpuTypeIds":         gpu_list,
         "gpuTypePriority":    "custom",  # try in order
-        "containerDiskInGb":  20,
-        "networkVolumeId":    volume_id,
-        "dataCenterIds":      ["US-TX-3"],  # pin to volume's datacenter
-        "volumeMountPath":    "/workspace",
+        "containerDiskInGb":  80,        # no network volume — store dataset + results on disk
         "ports":              ["22/tcp", "8080/http", "8888/http"],
         "env":                env,
         "dockerStartCmd":     ["bash", "-c", BOOTSTRAP_CMD],
@@ -228,11 +225,10 @@ def main():
             print(f"  {p['id']}  {p.get('name','?'):30s}  {p.get('desiredStatus','?')}")
         return
 
-    # Launch
-    volume_id = get_or_create_volume()
+    # Launch (no network volume — use large container disk, git handles persistence)
     print(f"[launch] task={args.task}  gens={args.generations}  cost_cap=${args.cost_cap}  big_gpu={args.big}")
     pod = launch_pod(
-        volume_id=volume_id,
+        volume_id=None,
         num_generations=args.generations,
         max_eval_jobs=args.eval_jobs,
         max_api_costs=args.cost_cap,

@@ -1,0 +1,89 @@
+========================================================================
+[evaluate] genome:      gen_0
+[evaluate] program:     C:\Users\evano\Desktop\ShinkaEvolveCarePD\care_pd_task_v2\results_smoke\gen_0\main.py
+[evaluate] results_dir: C:\Users\evano\Desktop\ShinkaEvolveCarePD\care_pd_task_v2\results_smoke\gen_0\results
+[evaluate] care_pd_dir: C:\Users\evano\Desktop\ShinkaEvolveCarePD\CARE-PD
+[evaluate] leaderboard: C:\Users\evano\Desktop\ShinkaEvolveCarePD\care_pd_task_v2\leaderboard.csv
+[evaluate] gpu:         CUDA  NVIDIA GeForce RTX 3050 4GB Laptop GPU  4.3GB  gpus=1
+========================================================================
+[evaluate] Loading dataset...
+[evaluate] subjects=23  walks=781  label_dist={0:341,1:276,2:164}  T_range=210-3015 frames  folds=6
+[evaluate] Pretrained checkpoints:
+  mixste: best_epoch_cpn_81f.bin(405MB)
+  momask: net_best_fid.tar(84MB)  opt.txt(0MB)
+  motionagformer: motionagformer-s-h36m.pth.tr(60MB)
+  motionbert: motionbert.bin(170MB)
+  motionbertlite: latest_epoch.bin(64MB)
+  motionclip: motionclip_encoder_checkpoint_0100.pth.tar(78MB)
+  poseformerv2: 27_243_45.2.bin(173MB)  9_81_46.0.bin(173MB)
+  potr: pre-trained_NTU_ckpt_epoch_199_enc_80_dec_20.pt(27MB)
+========================================================================
+[evaluate] Importing genome...
+[evaluate] Running run_evaluation()...
+
+────────────────────────────────────────────────────────────────────────
+  CARE-PD 6-fold CV  |  method=RF  device=cuda
+  Baseline (RF):  macro=0.565  c0=0.702  c1=0.495  c2=0.497
+────────────────────────────────────────────────────────────────────────
+
+  fold 1:  train=622 test=159  subs=['SUB18', 'SUB12', 'SUB01', 'SUB11']
+  dist: train={0:321,1:219,2:82}  test={0:20,1:57,2:82}
+  fold 1:  macro=0.3995 ↓  c0=0.357  c1=0.643  c2=0.198  (Δmacro=-0.166  Δc2=-0.299)
+
+  fold 2:  train=659 test=122  subs=['SUB20', 'SUB15', 'SUB02', 'SUB16']
+  dist: train={0:247,1:256,2:156}  test={0:94,1:20,2:8}
+  fold 2:  macro=0.5081 ↓  c0=0.884  c1=0.000  c2=0.640  (Δmacro=-0.057  Δc2=+0.143)
+
+  fold 3:  train=638 test=143  subs=['SUB06', 'SUB03', 'SUB14', 'SUB23']
+  dist: train={0:260,1:214,2:164}  test={0:81,1:62,2:0}
+  fold 3:  macro=0.5461 ↓  c0=0.884  c1=0.755  c2=0.000  (Δmacro=-0.019  Δc2=-0.497)
+
+  fold 4:  train=666 test=115  subs=['SUB04', 'SUB05', 'SUB21', 'SUB19']
+  dist: train={0:310,1:218,2:138}  test={0:31,1:58,2:26}
+  fold 4:  macro=0.5608 →  c0=0.456  c1=0.413  c2=0.814  (Δmacro=-0.004  Δc2=+0.317)
+
+  fold 5:  train=646 test=135  subs=['SUB24', 'SUB26', 'SUB08', 'SUB13']
+  dist: train={0:264,1:233,2:149}  test={0:77,1:43,2:15}
+  fold 5:  macro=0.4990 ↓  c0=0.852  c1=0.645  c2=0.000  (Δmacro=-0.066  Δc2=-0.497)
+
+  fold 6:  train=674 test=107  subs=['SUB17', 'SUB22', 'SUB07']
+  dist: train={0:303,1:240,2:131}  test={0:38,1:36,2:33}
+  fold 6:  macro=0.4717 ↓  c0=0.698  c1=0.000  c2=0.717  (Δmacro=-0.093  Δc2=+0.220)
+
+────────────────────────────────────────────────────────────────────────
+  Method                        macro      c0      c1      c2    Δmacro       Δc2
+  ────────────────────────────  ──────  ──────  ──────  ──────  ────────  ────────
+  Baseline (RF 6CV)             0.565   0.702   0.495   0.497         —         —
+  OurModel (RF)                 0.596   0.742   0.535   0.510    +0.031↑    +0.013↑
+  LOSO SOTA target              0.680
+  MIDA SOTA target              0.740
+────────────────────────────────────────────────────────────────────────
+========================================================================
+[evaluate] RESULTS — gen_0
+  Metric                   This genome    Baseline     Delta
+  ────────────────────────  ──────────  ──────────  ────────
+  macro_f1                     0.5956      0.5646   +0.0310 ↑
+  f1_class0 (normal)           0.7416      0.7024   +0.0392
+  f1_class1 (mild PD)          0.5350      0.4949   +0.0401
+  f1_class2 (severe PD) ◄      0.5103      0.4966   +0.0137 ↑  ← most important
+  eval_time_s                    31.7
+  n_walks                         781
+
+  Confusion matrix (rows=true, cols=pred):
+    pred→   [0]   [1]   [2]
+    true[0] normal: [297, 34, 10]
+    true[1] mild  : [108, 126, 42]
+    true[2] severe: [55, 35, 74]
+
+  Per-fold macro_f1:
+    fold 1: 0.3995 ↓  (test=159, train=622)
+    fold 2: 0.5081 ↓  (test=122, train=659)
+    fold 3: 0.5461 →  (test=143, train=638)
+    fold 4: 0.5608 →  (test=115, train=666)
+    fold 5: 0.4990 ↓  (test=135, train=646)
+    fold 6: 0.4717 ↓  (test=107, train=674)
+
+  pred_dist : {0: 460, 1: 195, 2: 126}
+  label_dist: {0: 341, 1: 276, 2: 164}
+========================================================================
+[evaluate] Leaderboard: C:\Users\evano\Desktop\ShinkaEvolveCarePD\care_pd_task_v2\leaderboard.csv

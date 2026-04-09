@@ -1,0 +1,381 @@
+  @@@@@@@@@@@@@@@@@@@@@      ░██████╗██╗░░██╗██╗███╗░░██╗██╗░░██╗░█████╗░
+  @                   @      ██╔════╝██║░░██║██║████╗░██║██║░██╔╝██╔══██╗
+  @          @        @      ╚█████╗░███████║██║██╔██╗██║█████═╝░███████║
+  @    @@   @@  @@    @      ░╚═══██╗██╔══██║██║██║╚████║██╔═██╗░██╔══██║
+  @   @     @    @@   @      ██████╔╝██║░░██║██║██║░╚███║██║░╚██╗██║░░██║
+  @    @@  @    @     @      ╚═════╝░╚═╝░░╚═╝╚═╝╚═╝░░╚══╝╚═╝░░╚═╝╚═╝░░╚═╝
+  @        @          @      @@@@@@@@@@@@@@@
+  @                   @   @@                 @@@@@
+  @@@@@@@@@@@@@@@@@@@@ @@                       @  @@                 █▀▀
+                      @                          @@  @                ██▄
+                    @      @@                      @  @@
+                   @       @         @              @   @             █░█
+                   @                 @               @  @             ▀▄▀
+                     @@@@@          @     @           @  @
+                      @            @          @       @ @@            █▀█
+                   @@    @@     @@       @@   @        @              █▄█
+                  @@        @@         @     @         @
+                 @@       @@   @@       @@@@@          @        @@    █░░
+              @ @@                @                    @              █▄▄
+             @ @@@@@             @@ @@                 @      @@
+            @                  @       @@              @    @@        █░█
+       @@@@@@@@@@@@@@@@@@@@@@             @@@          @@@@@@@  @@    ▀▄▀
+       @     @         @                      @@         @@@  @@
+        @@               @                      @      @   @  @@      █▀▀
+          @@@@@@@@@@@@@@@@@@                   @    @   @   @@        ██▄
+                                               @  @  @   @
+                                               @  @  @@@@
+                                               @  @@
+2026-04-06 16:57:29 - shinka.core.async_runner - INFO - Saved init_program_str to C:\Users\evano\Desktop\ShinkaEvolveCarePD\care_pd_task_v2\results_smoke\init_program.py
+2026-04-06 16:57:29 - shinka.core.async_runner - INFO - Saved evaluate_str to C:\Users\evano\Desktop\ShinkaEvolveCarePD\care_pd_task_v2\results_smoke\evaluate.py
+2026-04-06 16:57:29 - shinka.core.async_runner - INFO - 🖥️  System resources detected:
+2026-04-06 16:57:29 - shinka.core.async_runner - INFO -    • CPU cores: 14
+2026-04-06 16:57:29 - shinka.core.async_runner - INFO -    • Memory: 15.4 GB
+2026-04-06 16:57:29 - shinka.core.async_runner - INFO - 🔧 Concurrency settings:
+2026-04-06 16:57:29 - shinka.core.async_runner - INFO -    • Evaluation jobs: 1
+2026-04-06 16:57:29 - shinka.core.async_runner - INFO -    • Proposal jobs: 2
+2026-04-06 16:57:29 - shinka.core.async_runner - INFO -    • DB workers: 4
+2026-04-06 16:57:29 - shinka.core.async_runner - INFO -    • Total threads: 7
+2026-04-06 16:57:29 - shinka.core.async_runner - INFO - ================================================================================
+2026-04-06 16:57:29 - shinka.core.async_runner - INFO - ASYNC EVOLUTION RUN STARTED
+2026-04-06 16:57:29 - shinka.core.async_runner - INFO - ================================================================================
+2026-04-06 16:57:29 - shinka.core.async_runner - INFO - Max evaluation jobs: 1
+2026-04-06 16:57:29 - shinka.core.async_runner - INFO - Max proposal jobs: 2
+2026-04-06 16:57:29 - shinka.core.async_runner - INFO - Target generations: 3
+2026-04-06 16:57:29 - shinka.core.async_runner - INFO - Language: python
+2026-04-06 16:57:29 - shinka.core.async_runner - INFO - Results directory: C:\Users\evano\Desktop\ShinkaEvolveCarePD\care_pd_task_v2\results_smoke
+2026-04-06 16:57:29 - shinka.core.async_runner - INFO - Log file: C:\Users\evano\Desktop\ShinkaEvolveCarePD\care_pd_task_v2\results_smoke/evolution_run.log
+2026-04-06 16:57:29 - shinka.core.async_runner - INFO - Max API costs: $5.00
+2026-04-06 16:57:29 - shinka.core.async_runner - INFO - ================================================================================
+2026-04-06 16:57:29 - shinka.core.async_runner - INFO - Prompt evolution enabled with models: ['claude-opus-4-6', 'claude-sonnet-4-6', 'openrouter/google/gemini-2.5-pro-preview', 'openrouter/qwen/qwen3-235b-a22b-2507']
+2026-04-06 16:57:29 - shinka.database.async_dbase - INFO - 🔧 AsyncDB initialized with 4 workers, 4 concurrent DB ops (WAL mode)
+2026-04-06 16:57:29 - shinka.database.prompt_dbase - INFO - SystemPrompt 1daaee43-a9e9-4fda-b087-0ae28b926a69 added to DB - generation: 0, patch_type: init
+2026-04-06 16:57:29 - shinka.database.prompt_dbase - INFO - New best prompt: 1daaee43... (fitness: 0.0000)
+2026-04-06 16:57:29 - shinka.database.prompt_dbase - INFO - Added prompt 1daaee43... (gen=0, patch=init, fitness=0.0000)
+2026-04-06 16:57:29 - shinka.core.async_runner - INFO - Added initial prompt 1daaee43... to database
+2026-04-06 16:57:29 - shinka.core.async_runner - INFO - Prompt evolution initialized with archive size 10
+2026-04-06 16:57:29 - shinka.core.async_runner - INFO - Copying initial program from C:\Users\evano\Desktop\ShinkaEvolveCarePD\care_pd_task_v2\results_smoke\init_program.py
+2026-04-06 16:57:29 - shinka.core.async_runner - INFO - Starting initial program evaluation: C:\Users\evano\Desktop\ShinkaEvolveCarePD\care_pd_task_v2\results_smoke/gen_0/main.py
+2026-04-06 16:57:29 - shinka.launch.local - INFO - Submitted local process with PID: 46084
+2026-04-06 16:57:29 - shinka.launch.local - INFO - Launched local command: C:\Users\evano\Desktop\ShinkaEvolveCarePD\ShinkaEvolve\.venv\Scripts\python.exe C:\Users\evano\Desktop\ShinkaEvolveCarePD\care_pd_task_v2\results_smoke\evaluate.py --program_path C:\Users\evano\Desktop\ShinkaEvolveCarePD\care_pd_task_v2\results_smoke/gen_0/main.py --results_dir C:\Users\evano\Desktop\ShinkaEvolveCarePD\care_pd_task_v2\results_smoke/gen_0/results
+2026-04-06 16:58:09 - shinka.core.async_runner - INFO - Initial program evaluation completed in 40.07s
+2026-04-06 16:58:10 - shinka.embed.embedding - WARNING - Gemini token counting failed for gemini-embedding-exp-03-07; falling back to whitespace estimate. Error: 404 NOT_FOUND. {'error': {'code': 404, 'message': 'models/gemini-embedding-exp-03-07 is not found for API version v1beta, or is not supported for countTokens. Call ListModels to see the list of available models and their supported methods.', 'status': 'NOT_FOUND'}}
+2026-04-06 16:58:10 - shinka.embed.embedding - ERROR - Error getting Gemini embedding: 404 NOT_FOUND. {'error': {'code': 404, 'message': 'models/gemini-embedding-exp-03-07 is not found for API version v1beta, or is not supported for embedContent. Call ListModels to see the list of available models and their supported methods.', 'status': 'NOT_FOUND'}}
+2026-04-06 16:58:10 - shinka.core.async_runner - INFO - Initial program evaluated - correct: True, combined_score: 0.5956499028092767
+2026-04-06 16:58:10 - shinka.database.dbase - INFO - Program 3eab4b2e-70b5-4d7c-bf95-afdbecee84f4 added to DB - score: 0.5956499028092767.
+2026-04-06 16:58:10 - shinka.database.dbase - INFO - New best program: 3eab4b2e-70b5-4d7c-bf95-afdbecee84f4 (gen: 0, score: 0.5956, initialized island: 0).
+                                 Program Evaluation Summary - Gen 0 | Total Cost: $0.00                                 
+┌─────────────┬─────────┬───────────────┬─────────┬─────────────────────────────────┬────────┬────────┬─────────┬──────┐
+│  GenID: 0   │ Island  │    Status     │   Score │ Patch Name                      │ Type   │ Compl… │    Cost │ Time │
+├─────────────┼─────────┼───────────────┼─────────┼─────────────────────────────────┼────────┼────────┼─────────┼──────┤
+│ Best: 0.596 │   I-0   │   ✓ Correct   │   0.596 │ initial_program                 │ init   │    1.0 │  $0.000 │ 40.… │
+└─────────────┴─────────┴───────────────┴─────────┴─────────────────────────────────┴────────┴────────┴─────────┴──────┘
+2026-04-06 16:58:10 - shinka.database.dbase - INFO - Creating copies of initial program 3eab4b2e-70b5-4d7c-bf95-afdbecee84f4 for all islands
+2026-04-06 16:58:10 - shinka.database.islands - INFO - Created copy 5326b02d... of program 3eab4b2e... for island 1
+2026-04-06 16:58:10 - shinka.database.islands - INFO - Created 1 copies of program 3eab4b2e... for islands 1-1
+2026-04-06 16:58:10 - shinka.core.summarizer - INFO - Added program 3eab4b2e-70b5-4d7c-bf95-afdbecee84f4 to meta memory tracking (correct=True, total: 1)
+2026-04-06 16:58:10 - shinka.core.async_runner - INFO - Setup initial program: 3eab4b2e-70b5-4d7c-bf95-afdbecee84f4
+2026-04-06 16:58:10 - shinka.core.async_runner - INFO - Generation 0 completed during setup
+2026-04-06 16:58:10 - shinka.core.async_runner - INFO - Verifying database is ready for sampling...
+2026-04-06 16:58:10 - shinka.core.async_runner - INFO - Database ready - 2 program(s) available for sampling
+2026-04-06 16:58:10 - shinka.core.async_runner - INFO - Database verification completed - ready for proposal generation
+2026-04-06 16:58:10 - shinka.core.async_runner - INFO - 🔄 Job monitor task started
+2026-04-06 16:58:10 - shinka.core.async_runner - INFO - Proposal target=2 (sampling_ewma=0.00s, evaluation_ewma=0.00s, timing_samples=0, active_proposals=0, running_jobs=0)
+2026-04-06 16:58:10 - shinka.core.async_runner - INFO - Starting 2 new proposals. Pipeline: 0/2 (running_jobs=0, active_proposals=0/2), Remaining completed work: 2 (completed=1/3, next_generation=1)
+2026-04-06 16:58:10 - shinka.core.async_runner - INFO - Started proposal task for generation 1 (cost: $0.0000, 0.0%)
+2026-04-06 16:58:10 - shinka.core.async_runner - INFO - Started proposal task for generation 2 (cost: $0.0000, 0.0%)
+2026-04-06 16:58:10 - shinka.core.async_runner - INFO - 🔄 Meta summarizer task started
+2026-04-06 16:58:10 - shinka.core.async_runner - INFO - 🔍 Meta task check: completed_gens=1, target=3, pending_work=2, running_eval_jobs=0, running_proposal_jobs=2, api_costs=$0.0000/$5.00 (0.0%), should_stop=False, is_stuck=False, stuck_count=0, time_since_progress=0.0s
+2026-04-06 16:58:10 - shinka.core.async_runner - INFO - Generating proposal for generation 1
+2026-04-06 16:58:10 - shinka.core.async_runner - INFO - Generating proposal for generation 2
+2026-04-06 16:58:10 - shinka.core.async_runner - INFO - Getting meta recs for gen 1, sample_single_meta_rec=True
+2026-04-06 16:58:10 - shinka.core.summarizer - INFO - get_sampled_recommendation called, meta_recommendations exists: False
+2026-04-06 16:58:10 - shinka.core.summarizer - INFO - No meta recommendations available to sample from
+2026-04-06 16:58:10 - shinka.core.async_runner - INFO - meta_recs result: False
+2026-04-06 16:58:10 - shinka.core.async_runner - INFO - Getting meta recs for gen 2, sample_single_meta_rec=True
+2026-04-06 16:58:10 - shinka.core.summarizer - INFO - get_sampled_recommendation called, meta_recommendations exists: False
+2026-04-06 16:58:10 - shinka.core.summarizer - INFO - No meta recommendations available to sample from
+2026-04-06 16:58:10 - shinka.core.async_runner - INFO - meta_recs result: False
+2026-04-06 16:58:10 - shinka.database.parents - INFO - Island 0 => Probabilities: [1.0]
+2026-04-06 16:58:10 - shinka.database.parents - INFO - Island 0 => Scores: [0.5956499028092767]
+2026-04-06 16:58:10 - shinka.database.parents - INFO - Island 0 => Probabilities: [1.0]
+2026-04-06 16:58:10 - shinka.database.parents - INFO - Sampled parent 3eab4b2e-70b5-4d7c-bf95-afdbecee84f4 (Gen: 0, Score: 0.5956, Children: 0, Island: 0)
+2026-04-06 16:58:10 - shinka.database.parents - INFO - Island 0 => Scores: [0.5956499028092767]
+2026-04-06 16:58:10 - shinka.database.parents - INFO - Sampled parent 3eab4b2e-70b5-4d7c-bf95-afdbecee84f4 (Gen: 0, Score: 0.5956, Children: 0, Island: 0)
+              Parent & Context Sampling Summary - Gen 1 | Total Cost: $0.00 (Novelty: 1/2, Resample: 1/3)               
+┌─────────────┬──────┬─────────┬───────┬──────────┬─────────────────────────────────┬────────┬────────┬─────────┬──────┐
+│ Role        │ Gen  │ Island  │  ✓/✗  │    Score │ Patch Name                      │ Type   │ Compl… │    Cost │ Time │
+├─────────────┼──────┼─────────┼───────┼──────────┼─────────────────────────────────┼────────┼────────┼─────────┼──────┤
+│ PARENT      │  0   │   I-0   │   ✓   │    0.596 │ initial_program                 │ init   │    1.0 │  $0.000 │ 40.… │
+└─────────────┴──────┴─────────┴───────┴──────────┴─────────────────────────────────┴────────┴────────┴─────────┴──────┘
+2026-04-06 16:58:10 - shinka.core.async_runner - INFO - Generated patch type: full
+2026-04-06 16:58:10 - shinka.core.async_runner - INFO - Using evolved prompt: 1daaee43...
+              Parent & Context Sampling Summary - Gen 2 | Total Cost: $0.00 (Novelty: 1/2, Resample: 1/3)               
+┌─────────────┬──────┬─────────┬───────┬──────────┬─────────────────────────────────┬────────┬────────┬─────────┬──────┐
+│ Role        │ Gen  │ Island  │  ✓/✗  │    Score │ Patch Name                      │ Type   │ Compl… │    Cost │ Time │
+├─────────────┼──────┼─────────┼───────┼──────────┼─────────────────────────────────┼────────┼────────┼─────────┼──────┤
+│ PARENT      │  0   │   I-0   │   ✓   │    0.596 │ initial_program                 │ init   │    1.0 │  $0.000 │ 40.… │
+└─────────────┴──────┴─────────┴───────┴──────────┴─────────────────────────────────┴────────┴────────┴─────────┴──────┘
+2026-04-06 16:58:10 - shinka.llm.llm - INFO - ==> SAMPLING:
+  claude-opus-4-6                  0.0000
+  claude-sonnet-4-6                0.0000
+  openrouter/google/gemini-2.5-pro-preview   0.0000
+  openrouter/qwen/qwen3-235b-a22b-2507   1.0000
+2026-04-06 16:58:10 - shinka.llm.llm - INFO - ==> QUERYING: ['openrouter/qwen/qwen3-235b-a22b-2507', '1.0', '32768']
+2026-04-06 16:58:16 - shinka.core.async_runner - INFO - Generated patch type: diff
+2026-04-06 16:58:16 - shinka.core.async_runner - INFO - Using evolved prompt: 1daaee43...
+2026-04-06 16:58:16 - shinka.llm.llm - INFO - ==> SAMPLING:
+  claude-opus-4-6                  0.0000
+  claude-sonnet-4-6                1.0000
+  openrouter/google/gemini-2.5-pro-preview   0.0000
+  openrouter/qwen/qwen3-235b-a22b-2507   0.0000
+2026-04-06 16:58:16 - shinka.llm.llm - INFO - ==> QUERYING: ['claude-sonnet-4-6', '0.5', '32768']
+2026-04-06 16:58:17 - httpx - INFO - HTTP Request: POST https://openrouter.ai/api/v1/responses "HTTP/1.1 200 OK"
+2026-04-06 16:59:15 - httpx - INFO - HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-04-06 16:59:15 - shinka.llm.llm - INFO - ==> QUERY: API cost: $0.1154
+2026-04-06 16:59:15 - shinka.core.async_runner - INFO - Applying patch with language: python
+2026-04-06 16:59:15 - shinka.core.async_runner - INFO - Patch type for application: diff
+2026-04-06 16:59:15 - shinka.llm.llm - INFO - ==> QUERYING: ['claude-sonnet-4-6', '1.0', '32768']
+2026-04-06 16:59:47 - httpx - INFO - HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-04-06 16:59:47 - shinka.llm.llm - INFO - ==> QUERY: API cost: $0.1137
+2026-04-06 16:59:47 - shinka.core.async_runner - INFO - Applying patch with language: python
+2026-04-06 16:59:47 - shinka.core.async_runner - INFO - Patch type for application: diff
+                          Patch Metadata - Gen 2/3 - Novelty: 1/2 - Resample: 1/3 - Patch: 2/2                          
+┌──────────────────────────┬───────────────────────────────────────────────────────────────────────────────────────────┐
+│ Field                    │ Value                                                                                     │
+├──────────────────────────┼───────────────────────────────────────────────────────────────────────────────────────────┤
+│ patch_type               │ diff                                                                                      │
+│ patch_name               │ enhanced_rf_features_clinical                                                             │
+│ patch_description        │ Enhance the RandomForest feature set with clinically-motivated features beyond just       │
+│                          │ mean+std of 6D rotations. Adding velocity stats (bradykinesia), range of motion           │
+│                          │ (shortened stride), LR asymmetry stats, acceleration stats (tremor/jerkiness), and FFT    │
+│                          │ frequency band features. These directly correspond to clinical PD biomarkers and should   │
+│                          │ improve class 2 (severe PD) discrimination.                                               │
+│ num_applied              │ 1                                                                                         │
+│ api_costs                │ $0.2291                                                                                   │
+│ error_attempt            │ None                                                                                      │
+│ system_prompt_id         │ 1daaee43-a9e9-4fda-b087-0ae28b926a69                                                      │
+│ model_name               │ claude-sonnet-4-6                                                                         │
+│ temperature              │ 1.0                                                                                       │
+│ max_tokens               │ 32768                                                                                     │
+│ diff_summary             │ added: 126; deleted: 0; modified: 11;                                                     │
+└──────────────────────────┴───────────────────────────────────────────────────────────────────────────────────────────┘
+2026-04-06 16:59:48 - shinka.core.async_runner - INFO - Getting code embedding for generation 2...
+2026-04-06 16:59:48 - shinka.embed.embedding - WARNING - Gemini token counting failed for gemini-embedding-exp-03-07; falling back to whitespace estimate. Error: 404 NOT_FOUND. {'error': {'code': 404, 'message': 'models/gemini-embedding-exp-03-07 is not found for API version v1beta, or is not supported for countTokens. Call ListModels to see the list of available models and their supported methods.', 'status': 'NOT_FOUND'}}
+2026-04-06 16:59:48 - shinka.embed.embedding - ERROR - Error getting Gemini embedding: 404 NOT_FOUND. {'error': {'code': 404, 'message': 'models/gemini-embedding-exp-03-07 is not found for API version v1beta, or is not supported for embedContent. Call ListModels to see the list of available models and their supported methods.', 'status': 'NOT_FOUND'}}
+2026-04-06 16:59:48 - shinka.core.async_runner - INFO - Code embedding completed for generation 2 (cost: $0.0000)
+2026-04-06 16:59:48 - shinka.core.novelty_judge - INFO - NOVELTY CHECK: Skipping rejection sampling - no embedding
+2026-04-06 16:59:48 - shinka.launch.local - INFO - Submitted local process with PID: 2456
+2026-04-06 16:59:48 - shinka.launch.local - INFO - Launched local command: C:\Users\evano\Desktop\ShinkaEvolveCarePD\ShinkaEvolve\.venv\Scripts\python.exe C:\Users\evano\Desktop\ShinkaEvolveCarePD\care_pd_task_v2\results_smoke\evaluate.py --program_path C:\Users\evano\Desktop\ShinkaEvolveCarePD\care_pd_task_v2\results_smoke/gen_2/main.py --results_dir C:\Users\evano\Desktop\ShinkaEvolveCarePD\care_pd_task_v2\results_smoke/gen_2/results
+2026-04-06 16:59:48 - shinka.core.async_runner - INFO - Proposal → Eval: gen 2 submitted for eval (cost: $0.2291, total: $0.2291 (4.6%)). Running jobs: 1/1, Proposals: 2/2
+2026-04-06 17:00:37 - shinka.core.async_runner - INFO - ✅ Job ProcessWithLogging(PID: 2456) completed (gen 2) after 147.4s
+2026-04-06 17:00:38 - shinka.core.async_runner - INFO - 🔄 Processing 1 completed jobs: gens [2] (cost: $0.2291, 4.6%)
+2026-04-06 17:00:38 - shinka.core.async_runner - INFO - 🔄 SAFE PROCESSING: Starting job ProcessWithLogging(PID: 2456) (gen 2)
+2026-04-06 17:00:38 - shinka.launch.local - INFO - Monitoring local process with PID: 2456...
+2026-04-06 17:00:38 - shinka.launch.local - INFO - Process 2456 completed with return code: 0
+2026-04-06 17:00:38 - shinka.core.async_runner - INFO - 📂 RESULTS: Got results for ProcessWithLogging(PID: 2456): True
+2026-04-06 17:00:38 - shinka.core.async_runner - INFO - ✅ VALID RESULTS: ProcessWithLogging(PID: 2456) has valid results - correct=True, score=0.6083049291354231
+2026-04-06 17:00:38 - shinka.core.async_runner - INFO - 💾 DB ADD: Adding program to database for ProcessWithLogging(PID: 2456) (gen 2)...
+2026-04-06 17:00:38 - shinka.database.dbase - INFO - Program 2aaf6e69-94ee-403a-b4a4-8b61ac262f93 added to DB - score: 0.6083049291354231.
+2026-04-06 17:00:38 - shinka.core.async_runner - INFO - ✅ DB SUCCESS: Program 2aaf6e69-94ee-403a-b4a4-8b61ac262f93 successfully added to database for ProcessWithLogging(PID: 2456) (gen 2)
+2026-04-06 17:00:38 - shinka.core.async_runner - INFO - ✅ Successfully processed 1/1 jobs
+2026-04-06 17:00:38 - shinka.core.async_runner - INFO - ✅ Completed generations updated: 1 -> 2 (cost: $0.2291/$5.00, 4.6%)
+2026-04-06 17:00:38 - shinka.database.dbase - INFO - New best program: 2aaf6e69-94ee-403a-b4a4-8b61ac262f93 (gen: 0 → 2, score: 0.5956 → 0.6083, island: 0 → 0)
+                                 Program Evaluation Summary - Gen 2 | Total Cost: $0.23                                 
+┌─────────────┬─────────┬───────────────┬─────────┬─────────────────────────────────┬────────┬────────┬─────────┬──────┐
+│  GenID: 2   │ Island  │    Status     │   Score │ Patch Name                      │ Type   │ Compl… │    Cost │ Time │
+├─────────────┼─────────┼───────────────┼─────────┼─────────────────────────────────┼────────┼────────┼─────────┼──────┤
+│ Best: 0.608 │   I-0   │   ✓ Correct   │   0.608 │ enhanced_rf_features_clinical   │ diff   │    1.0 │  $0.229 │ 49.… │
+└─────────────┴─────────┴───────────────┴─────────┴─────────────────────────────────┴────────┴────────┴─────────┴──────┘
+2026-04-06 17:00:38 - shinka.core.summarizer - INFO - Added program 2aaf6e69-94ee-403a-b4a4-8b61ac262f93 to meta memory tracking (correct=True, total: 2)
+     AsymmetricUCB (c=1.000, eps=0.200, adaptive=True, asym=True, exp_base=1.000, shift_base=True, shift_parent=True, lo
+                                                      cost_c=0.100, cost_pow=1.00, cost_pct=50)                         
+┌────────────────────┬────┬─────────┬────────┬───────────┬───────────┬────────────┬──────────┬──────────┬────────────┬──
+│ arm                │  n │  n_cost │    div │  log mean │  tot_cost │  mean_cost │  exploit │  explore │  score_raw │  
+├────────────────────┼────┼─────────┼────────┼───────────┼───────────┼────────────┼──────────┼──────────┼────────────┼──
+│ claude-opus-4-6    │  0 │       0 │  0.000 │      -inf │    0.0000 │          - │   0.0000 │   1.1774 │     1.1774 │  
+│ claude-sonnet-4-6  │  1 │       1 │  0.950 │   -4.3640 │    0.2291 │     0.2291 │   1.0000 │   1.1774 │     2.1774 │  
+│ gemini-2.5-pro-pr… │  0 │       0 │  0.000 │      -inf │    0.0000 │          - │   0.0000 │   1.1774 │     1.1774 │  
+│ qwen3-235b-a22b-2… │  1 │       0 │  0.000 │      -inf │    0.0000 │          - │   0.0000 │   1.1774 │     1.1774 │  
+└────────────────────┴────┴─────────┴────────┴───────────┴───────────┴────────────┴──────────┴──────────┴────────────┴──
+2026-04-06 17:00:38 - shinka.core.async_runner - INFO - New best program found: gen 2, id 2aaf6e... Copied to C:\Users\evano\Desktop\ShinkaEvolveCarePD\care_pd_task_v2\results_smoke\best
+2026-04-06 17:00:38 - shinka.core.async_runner - INFO - ✅ JOB COMPLETE: Finished processing ProcessWithLogging(PID: 2456) - program 2aaf6e69-94ee-403a-b4a4-8b61ac262f93 added (gen 2)
+2026-04-06 17:00:40 - shinka.core.async_runner - INFO - 🔍 Meta task check: completed_gens=2, target=3, pending_work=1, running_eval_jobs=0, running_proposal_jobs=1, api_costs=$0.2291/$5.00 (4.6%), should_stop=False, is_stuck=False, stuck_count=0, time_since_progress=2.2s
+2026-04-06 17:00:43 - shinka.core.async_runner - INFO - Proposal target=2 (sampling_ewma=97.83s, evaluation_ewma=49.62s, timing_samples=1, active_proposals=1, running_jobs=0)
+2026-04-06 17:05:40 - shinka.core.async_runner - INFO - 🔍 Meta task check: completed_gens=2, target=3, pending_work=1, running_eval_jobs=0, running_proposal_jobs=1, api_costs=$0.2291/$5.00 (4.6%), should_stop=False, is_stuck=False, stuck_count=0, time_since_progress=302.4s
+2026-04-06 17:11:09 - shinka.core.async_runner - INFO - 🔍 Meta task check: completed_gens=2, target=3, pending_work=1, running_eval_jobs=0, running_proposal_jobs=1, api_costs=$0.2291/$5.00 (4.6%), should_stop=False, is_stuck=False, stuck_count=0, time_since_progress=631.2s
+2026-04-06 17:15:09 - shinka.llm.llm - INFO - ==> QUERY: API cost: $0.0016
+2026-04-06 17:15:09 - shinka.core.async_runner - INFO - Applying patch with language: python
+2026-04-06 17:15:09 - shinka.core.async_runner - INFO - Patch type for application: full
+                          Patch Metadata - Gen 1/3 - Novelty: 1/2 - Resample: 1/3 - Patch: 1/2                          
+┌──────────────────────────┬───────────────────────────────────────────────────────────────────────────────────────────┐
+│ Field                    │ Value                                                                                     │
+├──────────────────────────┼───────────────────────────────────────────────────────────────────────────────────────────┤
+│ patch_type               │ full                                                                                      │
+│ patch_name               │ none                                                                                      │
+│ patch_description        │ This redesign replaces the 1D-CNN with an adaptive bidirectional LSTM architecture that   │
+│                          │ better captures temporal gait dynamics. It introduces enhanced feature engineering with   │
+│                          │ clinical biomarkers (velocity, acceleration, range-of-motion, asymmetry) and handles      │
+│                          │ variable sequence lengths naturally. The model uses predictive normalization for training │
+│                          │ stability and includes dropout for regularization. A masked global pooling converts LSTM  │
+│                          │ outputs to fixed-length representations for classification. This approach improves on the │
+│                          │ original by better modeling temporal dependencies in gait patterns and incorporating      │
+│                          │ domain-specific clinical features critical for Parkinson's assessment.                    │
+│ num_applied              │ 1                                                                                         │
+│ api_costs                │ $0.0016                                                                                   │
+│ error_attempt            │ None                                                                                      │
+│ system_prompt_id         │ 1daaee43-a9e9-4fda-b087-0ae28b926a69                                                      │
+│ model_name               │ openrouter/qwen/qwen3-235b-a22b-2507                                                      │
+│ temperature              │ 0.5                                                                                       │
+│ max_output_tokens        │ 32768                                                                                     │
+│ diff_summary             │ added: 0; deleted: 228; modified: 170;                                                    │
+└──────────────────────────┴───────────────────────────────────────────────────────────────────────────────────────────┘
+2026-04-06 17:15:09 - shinka.core.async_runner - INFO - Getting code embedding for generation 1...
+2026-04-06 17:15:09 - shinka.embed.embedding - WARNING - Gemini token counting failed for gemini-embedding-exp-03-07; falling back to whitespace estimate. Error: 404 NOT_FOUND. {'error': {'code': 404, 'message': 'models/gemini-embedding-exp-03-07 is not found for API version v1beta, or is not supported for countTokens. Call ListModels to see the list of available models and their supported methods.', 'status': 'NOT_FOUND'}}
+2026-04-06 17:15:09 - shinka.embed.embedding - ERROR - Error getting Gemini embedding: 404 NOT_FOUND. {'error': {'code': 404, 'message': 'models/gemini-embedding-exp-03-07 is not found for API version v1beta, or is not supported for embedContent. Call ListModels to see the list of available models and their supported methods.', 'status': 'NOT_FOUND'}}
+2026-04-06 17:15:09 - shinka.core.async_runner - INFO - Code embedding completed for generation 1 (cost: $0.0000)
+2026-04-06 17:15:09 - shinka.core.novelty_judge - INFO - NOVELTY CHECK: Skipping rejection sampling - no embedding
+2026-04-06 17:15:09 - shinka.launch.local - INFO - Submitted local process with PID: 34152
+2026-04-06 17:15:09 - shinka.launch.local - INFO - Launched local command: C:\Users\evano\Desktop\ShinkaEvolveCarePD\ShinkaEvolve\.venv\Scripts\python.exe C:\Users\evano\Desktop\ShinkaEvolveCarePD\care_pd_task_v2\results_smoke\evaluate.py --program_path C:\Users\evano\Desktop\ShinkaEvolveCarePD\care_pd_task_v2\results_smoke/gen_1/main.py --results_dir C:\Users\evano\Desktop\ShinkaEvolveCarePD\care_pd_task_v2\results_smoke/gen_1/results
+2026-04-06 17:15:09 - shinka.core.async_runner - INFO - Proposal → Eval: gen 1 submitted for eval (cost: $0.0016, total: $0.2307 (4.6%)). Running jobs: 1/1, Proposals: 1/2
+2026-04-06 17:15:17 - shinka.core.async_runner - INFO - ✅ Job ProcessWithLogging(PID: 34152) completed (gen 1) after 1026.8s
+2026-04-06 17:15:17 - shinka.core.async_runner - INFO - 🔄 Processing 1 completed jobs: gens [1] (cost: $0.2307, 4.6%)
+2026-04-06 17:15:17 - shinka.core.async_runner - INFO - 🔄 SAFE PROCESSING: Starting job ProcessWithLogging(PID: 34152) (gen 1)
+2026-04-06 17:15:17 - shinka.launch.local - INFO - Monitoring local process with PID: 34152...
+2026-04-06 17:15:17 - shinka.launch.local - INFO - Process 34152 completed with return code: 0
+2026-04-06 17:15:17 - shinka.core.async_runner - INFO - 📂 RESULTS: Got results for ProcessWithLogging(PID: 34152): True
+2026-04-06 17:15:17 - shinka.core.async_runner - INFO - ✅ VALID RESULTS: ProcessWithLogging(PID: 34152) has valid results - correct=False, score=0.0
+2026-04-06 17:15:17 - shinka.core.async_runner - INFO - 💾 DB ADD: Adding program to database for ProcessWithLogging(PID: 34152) (gen 1)...
+2026-04-06 17:15:17 - shinka.database.dbase - INFO - Program 403890ca-f16f-43a4-8b92-5a080eff3824 added to DB - score: 0.0.
+2026-04-06 17:15:17 - shinka.core.async_runner - INFO - ✅ DB SUCCESS: Program 403890ca-f16f-43a4-8b92-5a080eff3824 successfully added to database for ProcessWithLogging(PID: 34152) (gen 1)
+2026-04-06 17:15:17 - shinka.core.async_runner - INFO - ✅ Successfully processed 1/1 jobs
+2026-04-06 17:15:17 - shinka.core.async_runner - INFO - ✅ Completed generations updated: 2 -> 3 (cost: $0.2307/$5.00, 4.6%)
+                                 Program Evaluation Summary - Gen 1 | Total Cost: $0.23                                 
+┌─────────────┬─────────┬───────────────┬─────────┬─────────────────────────────────┬────────┬────────┬─────────┬──────┐
+│  GenID: 1   │ Island  │    Status     │   Score │ Patch Name                      │ Type   │ Compl… │    Cost │ Time │
+├─────────────┼─────────┼───────────────┼─────────┼─────────────────────────────────┼────────┼────────┼─────────┼──────┤
+│ Best: 0.608 │   I-0   │  ✗ Incorrect  │   0.000 │ none                            │ full   │    1.0 │  $0.002 │ 7.4s │
+└─────────────┴─────────┴───────────────┴─────────┴─────────────────────────────────┴────────┴────────┴─────────┴──────┘
+2026-04-06 17:15:17 - shinka.core.summarizer - INFO - Added program 403890ca-f16f-43a4-8b92-5a080eff3824 to meta memory tracking (correct=False, total: 3)
+2026-04-06 17:15:17 - shinka.core.async_runner - INFO - Evolution stopping: completed_generations=3, target=3, running_jobs=0, active_proposals=0
+2026-04-06 17:15:17 - shinka.core.async_runner - INFO - 🛑 Job monitor setting should_stop signal
+2026-04-06 17:15:17 - shinka.core.async_runner - INFO - 🏁 Job monitor setting finalization_complete signal
+2026-04-06 17:15:17 - shinka.core.async_runner - INFO - Job monitor task exited
+2026-04-06 17:15:17 - shinka.core.async_runner - INFO - Draining 1 queued background side effect(s) before finalization...
+     AsymmetricUCB (c=1.000, eps=0.200, adaptive=True, asym=True, exp_base=1.000, shift_base=True, shift_parent=True, lo
+                                                      cost_c=0.100, cost_pow=1.00, cost_pct=50)                         
+┌────────────────────┬────┬─────────┬────────┬───────────┬───────────┬────────────┬──────────┬──────────┬────────────┬──
+│ arm                │  n │  n_cost │    div │  log mean │  tot_cost │  mean_cost │  exploit │  explore │  score_raw │  
+├────────────────────┼────┼─────────┼────────┼───────────┼───────────┼────────────┼──────────┼──────────┼────────────┼──
+│ claude-opus-4-6    │  0 │       0 │  0.000 │      -inf │    0.0000 │          - │   0.0000 │   1.1774 │     1.1774 │  
+│ claude-sonnet-4-6  │  1 │       1 │  0.902 │   -4.3646 │    0.2291 │     0.2291 │   1.0000 │   1.1774 │     2.1774 │  
+│ gemini-2.5-pro-pr… │  0 │       0 │  0.000 │      -inf │    0.0000 │          - │   0.0000 │   1.1774 │     1.1774 │  
+│ qwen3-235b-a22b-2… │  1 │       1 │  0.950 │      -inf │    0.0016 │     0.0016 │   0.0000 │   1.1774 │     1.1774 │  
+└────────────────────┴────┴─────────┴────────┴───────────┴───────────┴────────────┴──────────┴──────────┴────────────┴──
+2026-04-06 17:15:17 - shinka.core.async_runner - INFO - ✅ JOB COMPLETE: Finished processing ProcessWithLogging(PID: 34152) - program 403890ca-f16f-43a4-8b92-5a080eff3824 added (gen 1)
+2026-04-06 17:15:17 - shinka.core.async_runner - INFO - 🔄 Performing final embedding recomputation and meta summary...
+2026-04-06 17:15:17 - shinka.core.async_runner - INFO - Starting final PCA/embedding recomputation...
+2026-04-06 17:15:17 - shinka.core.async_runner - INFO - ⚠️  This may take a while for large datasets...
+2026-04-06 17:15:17 - shinka.database.async_dbase - INFO - Forcing final embedding and cluster recomputation...
+2026-04-06 17:15:17 - shinka.database.async_dbase - INFO - Scheduled embedding recomputation after 10 program additions
+2026-04-06 17:15:17 - shinka.database.async_dbase - INFO - Background embedding recomputation completed
+2026-04-06 17:15:17 - shinka.database.async_dbase - INFO - Final embedding and cluster recomputation complete.
+2026-04-06 17:15:17 - shinka.core.async_runner - INFO - Final PCA/embedding recomputation completed successfully
+2026-04-06 17:15:17 - shinka.core.async_runner - INFO - Starting final meta summary generation...
+2026-04-06 17:15:17 - shinka.core.async_summarizer - INFO - Performing final meta summary for 3 remaining programs...
+2026-04-06 17:15:17 - shinka.core.async_summarizer - INFO - ==> Step 1 - Processing 3 programs with async batch query
+2026-04-06 17:15:17 - shinka.llm.llm - INFO - ==> SAMPLING 3 SAMPLES:
+  claude-sonnet-4-6                1.0000
+2026-04-06 17:15:17 - shinka.llm.llm - INFO - ==> SAMPLING: 1/3 ['claude-sonnet-4-6', '0.0', '16384']
+2026-04-06 17:15:17 - shinka.llm.llm - INFO - ==> SAMPLING: 2/3 ['claude-sonnet-4-6', '0.0', '16384']
+2026-04-06 17:15:17 - shinka.llm.llm - INFO - ==> SAMPLING: 3/3 ['claude-sonnet-4-6', '0.0', '16384']
+2026-04-06 17:15:24 - httpx - INFO - HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-04-06 17:15:25 - httpx - INFO - HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-04-06 17:15:26 - httpx - INFO - HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-04-06 17:15:26 - shinka.llm.llm - INFO - ==> SAMPLING: Individual API costs: ['0.0489', '0.0556', '0.0348']
+2026-04-06 17:15:26 - shinka.llm.llm - INFO - ==> SAMPLING: Total API costs: $0.1393
+2026-04-06 17:15:26 - shinka.core.async_summarizer - INFO - ==> Step 1 - 3/3 individual summaries generated (cost: $0.1393)
+2026-04-06 17:15:26 - shinka.llm.llm - INFO - ==> QUERYING: ['claude-sonnet-4-6', '0.0', '16384']
+2026-04-06 17:15:39 - shinka.core.async_runner - INFO - Meta summarizer task exited
+2026-04-06 17:16:07 - httpx - INFO - HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-04-06 17:16:07 - shinka.llm.llm - INFO - ==> QUERY: API cost: $0.0819
+2026-04-06 17:16:07 - shinka.core.async_summarizer - INFO - ==> Step 2 - Global insights generated (cost: $0.0819)
+2026-04-06 17:16:07 - shinka.llm.llm - INFO - ==> QUERYING: ['claude-sonnet-4-6', '0.0', '16384']
+2026-04-06 17:16:32 - httpx - INFO - HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-04-06 17:16:32 - shinka.llm.llm - INFO - ==> QUERY: API cost: $0.0716
+2026-04-06 17:16:32 - shinka.core.async_summarizer - INFO - ==> Step 3 - Recommendations generated (cost: $0.0716)
+2026-04-06 17:16:32 - shinka.core.async_summarizer - INFO - ==> Meta-analysis completed successfully with 3-step process (total cost: $0.2927)
+2026-04-06 17:16:32 - shinka.core.async_summarizer - INFO - Processed and cleared 3 programs from meta memory (total processed: 3)
+2026-04-06 17:16:32 - shinka.core.async_summarizer - INFO - Wrote meta output to C:\Users\evano\Desktop\ShinkaEvolveCarePD\care_pd_task_v2\results_smoke\meta\meta_3.txt
+2026-04-06 17:16:32 - shinka.core.async_summarizer - INFO - Final meta summary completed (cost: $0.2927)
+2026-04-06 17:16:32 - shinka.core.async_summarizer - INFO - Stored final meta cost $0.2927 in best program metadata
+2026-04-06 17:16:32 - shinka.core.async_runner - INFO - Final meta summary completed successfully (cost: $0.2927)
+2026-04-06 17:16:33 - shinka.core.async_runner - INFO - 🏁 All final operations completed, proceeding to cleanup...
+2026-04-06 17:16:33 - shinka.database.prompt_dbase - INFO - Recomputing percentiles for 1 prompts using 3 total scores
+2026-04-06 17:16:33 - shinka.database.prompt_dbase - INFO - Percentile recomputation complete
+2026-04-06 17:16:33 - shinka.core.async_runner - INFO - Final recomputation of prompt fitness percentiles complete (using 3 correct program scores)
+2026-04-06 17:16:33 - shinka.database.async_dbase - INFO - 🔧 Closing async database with monitoring...
+2026-04-06 17:16:33 - shinka.database.async_dbase - INFO - Async database closed
+2026-04-06 17:16:33 - shinka.core.async_runner - INFO - ================================================================================
+2026-04-06 17:16:33 - shinka.core.async_runner - INFO - ASYNC EVOLUTION COMPLETED
+2026-04-06 17:16:33 - shinka.core.async_runner - INFO - ================================================================================
+2026-04-06 17:16:33 - shinka.core.async_runner - INFO - Total generations: 3
+2026-04-06 17:16:33 - shinka.core.async_runner - INFO - Total proposals generated: 2
+2026-04-06 17:16:33 - shinka.core.async_runner - INFO - Total API cost: $0.2307
+2026-04-06 17:16:33 - shinka.core.async_runner - INFO - API cost budget usage: 4.6% ($0.2307 / $5.00)
+2026-04-06 17:16:33 - shinka.core.async_runner - INFO - Total runtime: 1143.53 seconds
+2026-04-06 17:16:33 - shinka.core.async_runner - INFO - Average time per proposal: 571.77 seconds
+2026-04-06 17:16:33 - shinka.core.async_runner - INFO - ----------------------------------------
+2026-04-06 17:16:33 - shinka.core.async_runner - INFO - FINAL OPERATIONS STATUS:
+2026-04-06 17:16:33 - shinka.core.async_runner - INFO - PCA/Embedding recomputation: COMPLETED
+2026-04-06 17:16:33 - shinka.core.async_runner - INFO - Meta summary generation: COMPLETED
+2026-04-06 17:16:33 - shinka.core.async_runner - INFO - ----------------------------------------
+2026-04-06 17:16:33 - shinka.core.async_runner - INFO - ----------------------------------------
+2026-04-06 17:16:33 - shinka.core.async_runner - INFO - TIMING BOTTLENECK SUMMARY:
+2026-04-06 17:16:33 - shinka.core.async_runner - INFO - Programs analyzed: 2 (generation > 0 with persisted metadata)
+2026-04-06 17:16:33 - shinka.core.async_runner - INFO - Sampling: mean=558.62s median=558.62s p90=1019.41s max=1019.41s (n=2)
+2026-04-06 17:16:33 - shinka.core.async_runner - INFO - Evaluation: mean=28.52s median=28.52s p90=49.62s max=49.62s (n=2)
+2026-04-06 17:16:33 - shinka.core.async_runner - INFO - Eval->Postprocess Wait: mean=0.05s median=0.05s p90=0.06s max=0.06s (n=2)
+2026-04-06 17:16:33 - shinka.core.async_runner - INFO - Postprocess Hot Path: mean=0.16s median=0.16s p90=0.17s max=0.17s (n=2)
+2026-04-06 17:16:33 - shinka.core.async_runner - INFO - Postprocess->Apply Wait: mean=0.04s median=0.04s p90=0.05s max=0.05s (n=2)
+2026-04-06 17:16:33 - shinka.core.async_runner - INFO - Side-Effect Apply: mean=0.14s median=0.14s p90=0.18s max=0.18s (n=2)
+2026-04-06 17:16:33 - shinka.core.async_runner - INFO - Pipeline Unaccounted: mean=0.00s median=0.00s p90=0.00s max=0.00s (n=2)
+2026-04-06 17:16:33 - shinka.core.async_runner - INFO - End-to-End w/ Side Effects: mean=587.53s median=587.53s p90=1027.19s max=1027.19s (n=2)
+2026-04-06 17:16:33 - shinka.core.async_runner - INFO - Top Eval->Postprocess Waits: gen 1=0.1s, gen 2=0.0s
+2026-04-06 17:16:33 - shinka.core.async_runner - INFO - Top Postprocess->Apply Waits: gen 1=0.1s, gen 2=0.0s
+2026-04-06 17:16:33 - shinka.core.async_runner - INFO - Top Side-Effect Apply Durations: gen 2=0.2s, gen 1=0.1s
+        Program Database Summary                       Best Program              
+┌──────────────────────┬───────────────┐ ┌────────────────┬─────────────────────┐
+│ Metric               │ Value         │ │ Attribute      │ Value               │
+├──────────────────────┼───────────────┤ ├────────────────┼─────────────────────┤
+│ Overall Best Score   │ 0.61          │ │ ID             │ 2aaf6e69...         │
+│ Total Programs       │ 4             │ │ Generation     │ 2                   │
+│ Correct Programs     │ 3 / 4 (75%)   │ │ Complexity     │ 1.00                │
+│ Archived Programs    │ 3 / 80 (4%)   │ │ Embedding[0]   │ N/A                 │
+│ Island Populations   │ I0: 3 | I1: 1 │ │ Metric: Score  │ 0.61                │
+│ Migration Policy     │ 8G, 10%(E)    │ │ Timestamp      │ 2026-04-06 17:00:38 │
+└──────────────────────┴───────────────┘ └────────────────┴─────────────────────┘
+          Cost & Stats Summary                                                   
+┌─────────────────────────┬────────────┐                                         
+│ Metric                  │ Value      │                                         
+├─────────────────────────┼────────────┤                                         
+│ Total API Cost          │ $0.23      │                                         
+│ Total Embedding Cost    │ $0.00      │                                         
+│ Total Novelty Cost      │ $0.00      │                                         
+│ Total Meta Cost         │ $0.29      │                                         
+│ Total Combined Cost     │ $0.52      │                                         
+│ Total Compute           │ 0h 2m 17s  │                                         
+└─────────────────────────┴────────────┘                                         
+                                            Top 10 Best Performing Programs                                             
+┌──────┬──────┬────┬────────┬──────────┬────────────────────────────────┬────────┬────────┬────────┬───────────────────┐
+│ Rank │ Gen  │ ✓… │  Score │ Complex… │ Patch Name                     │ Type   │ Island │ Child… │ Timestamp         │
+├──────┼──────┼────┼────────┼──────────┼────────────────────────────────┼────────┼────────┼────────┼───────────────────┤
+│  #1  │  2   │ ✓  │  0.608 │      1.0 │ enhanced_rf_features_clinical  │ diff   │   I0   │      0 │ 2026-04-06        │
+│      │      │    │        │          │                                │        │        │        │ 17:00:38          │
+├──────┼──────┼────┼────────┼──────────┼────────────────────────────────┼────────┼────────┼────────┼───────────────────┤
+│  #2  │  0   │ ✓  │  0.596 │      1.0 │ initial_program                │ init   │   I0   │      2 │ 2026-04-06        │
+│      │      │    │        │          │                                │        │        │        │ 16:58:10          │
+├──────┼──────┼────┼────────┼──────────┼────────────────────────────────┼────────┼────────┼────────┼───────────────────┤
+│  #3  │  0   │ ✓  │  0.596 │      1.0 │ initial_program                │ init   │   I1   │      0 │ 2026-04-06        │
+│      │      │    │        │          │                                │        │        │        │ 16:58:10          │
+└──────┴──────┴────┴────────┴──────────┴────────────────────────────────┴────────┴────────┴────────┴───────────────────┘

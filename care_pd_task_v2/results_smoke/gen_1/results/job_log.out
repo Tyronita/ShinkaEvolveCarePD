@@ -1,0 +1,34 @@
+========================================================================
+[evaluate] genome:      gen_1
+[evaluate] program:     C:\Users\evano\Desktop\ShinkaEvolveCarePD\care_pd_task_v2\results_smoke\gen_1\main.py
+[evaluate] results_dir: C:\Users\evano\Desktop\ShinkaEvolveCarePD\care_pd_task_v2\results_smoke\gen_1\results
+[evaluate] care_pd_dir: C:\Users\evano\Desktop\ShinkaEvolveCarePD\CARE-PD
+[evaluate] leaderboard: C:\Users\evano\Desktop\ShinkaEvolveCarePD\care_pd_task_v2\leaderboard.csv
+[evaluate] gpu:         CUDA  NVIDIA GeForce RTX 3050 4GB Laptop GPU  4.3GB  gpus=1
+========================================================================
+[evaluate] Loading dataset...
+[evaluate] subjects=23  walks=781  label_dist={0:341,1:276,2:164}  T_range=210-3015 frames  folds=6
+[evaluate] Pretrained checkpoints:
+  mixste: best_epoch_cpn_81f.bin(405MB)
+  momask: net_best_fid.tar(84MB)  opt.txt(0MB)
+  motionagformer: motionagformer-s-h36m.pth.tr(60MB)
+  motionbert: motionbert.bin(170MB)
+  motionbertlite: latest_epoch.bin(64MB)
+  motionclip: motionclip_encoder_checkpoint_0100.pth.tar(78MB)
+  poseformerv2: 27_243_45.2.bin(173MB)  9_81_46.0.bin(173MB)
+  potr: pre-trained_NTU_ckpt_epoch_199_enc_80_dec_20.pt(27MB)
+========================================================================
+[evaluate] Importing genome...
+[evaluate] Running run_evaluation()...
+
+────────────────────────────────────────────────────────────────────────
+[evaluate] RUN_EVALUATION FAILED after 0.00s
+Traceback (most recent call last):
+  File "C:\Users\evano\Desktop\ShinkaEvolveCarePD\care_pd_task_v2\results_smoke\evaluate.py", line 186, in main
+    result = mod.run_evaluation(data=data, folds=folds, care_pd_dir=_CARE_PD)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\evano\Desktop\ShinkaEvolveCarePD\care_pd_task_v2\results_smoke/gen_1/main.py", line 492, in run_evaluation
+    print(f'  CARE-PD 6-fold CV  |  method={METHOD}  device={DEVICE}')
+                                            ^^^^^^
+NameError: name 'METHOD' is not defined
+
