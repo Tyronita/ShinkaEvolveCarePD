@@ -58,9 +58,9 @@ The entire pipeline above is wrapped in an **EVOLVE-BLOCK** — ShinkaEvolve can
 
 ## Task 1 Results
 
-> Full analysis: [`docs/care_pd_task1_results.md`](docs/care_pd_task1_results.md)
+> Full analysis: [`care_pd_task1_results.md`](care_pd_task1_results.md)
 
-### Evolution Run Summary (`care_pd_full`, ~30 generations on RunPod GPU)
+### Evolution Run Summary (`care_pd_full`, ~90 generations on RunPod GPU)
 
 | Genome | Macro-F1 | F1-Normal | F1-Mild | F1-Severe | Notes |
 |---|---:|---:|---:|---:|---|
@@ -68,12 +68,18 @@ The entire pipeline above is wrapped in an **EVOLVE-BLOCK** — ShinkaEvolve can
 | Initial genome (MotionCLIP) | 0.565 | 0.702 | 0.495 | 0.497 | Task 1 seed |
 | gen_13 | 0.409 | 0.502 | 0.500 | 0.226 | Early improvement on severe |
 | gen_24 | 0.446 | 0.517 | 0.461 | 0.360 | Better severe detection |
-| **gen_21** | **0.623** | **0.774** | **0.584** | **0.512** | Best severe F1 — Pareto-optimal |
-| **gen_28** | **0.634** | **0.789** | **0.634** | **0.481** | Best overall macro-F1 |
+| gen_21 | 0.623 | 0.774 | 0.584 | **0.512** | Best severe F1 — Pareto-optimal |
+| gen_28 | 0.634 | 0.789 | 0.634 | 0.481 | Early peak |
+| gen_31 | 0.636 | 0.791 | 0.643 | 0.473 | Incremental gain |
+| gen_55 | 0.614 | 0.739 | 0.582 | **0.521** | Strong severe detection |
+| gen_64 | 0.617 | 0.742 | 0.647 | 0.461 | — |
+| **gen_65** | **0.655** | **0.772** | **0.673** | **0.521** | **Best overall — new peak** |
+| gen_69 | 0.619 | 0.779 | 0.600 | 0.478 | — |
+| gen_88 | 0.616 | 0.769 | 0.594 | 0.484 | Late-run strong result |
 | CARE-PD LOSO SOTA | 0.68+ | — | — | — | Published target |
 | MIDA SOTA | 0.74+ | — | — | — | Upper bound |
 
-**+12.2% improvement** over the starting baseline (0.565 → 0.634) with zero manual architecture design after the seed program.
+**+16.0% improvement** over the starting baseline (0.565 → 0.655) with zero manual architecture design after the seed program.
 
 ### Evolution Lineage
 
@@ -83,34 +89,39 @@ The winning genomes emerged from a non-monotonic search — many intermediate pr
 Generation 0  →  0.346  (initial random mutations, degraded)
 Generation 8  →  0.315  (worse still)
 Generation 13 →  0.409  (first real progress on severe class)
-Generation 15 →  0.337  (regression)
 Generation 21 →  0.623  ← breakthrough
-Generation 28 →  0.634  ← best
+Generation 28 →  0.634
+Generation 31 →  0.636
+Generation 36 →  0.612
+Generation 55 →  0.614  (strong severe PD detection)
+Generation 65 →  0.655  ← best overall
+Generation 69 →  0.619
+Generation 88 →  0.616
 ```
 
-This is expected behavior for evolutionary search: exploration requires tolerating temporary regression before exploitation finds breakthroughs.
+After gen_28, the archive plateaued around 0.59–0.62 for ~30 generations before gen_65 broke through to a new best.
 
 ### Pareto Trade-off: Overall vs. Severe PD
 
-gen_21 and gen_28 represent different clinical trade-offs:
+Two genomes represent distinct clinical trade-offs:
 
-- **gen_28** (0.634 macro-F1): Best for benchmark leaderboards
-- **gen_21** (0.623 macro-F1, **0.512 F1-severe**): Best for clinical deployment — maximizes detection of the most impaired patients
+- **gen_65** (0.655 macro-F1, **0.521 F1-severe**): Best on both dimensions — strongest overall
+- **gen_21** (0.623 macro-F1, **0.512 F1-severe**): Pareto-optimal at lower compute; similar severe-class performance
 
-In Parkinson's care, **missing a severe patient is more costly than a false alarm**. A clinical system should prefer gen_21's operating point.
+In Parkinson's care, **missing a severe patient is more costly than a false alarm**. A clinical system should prefer gen_65's operating point.
 
-### Generalization Across Subject Cohorts (gen_28, per fold)
+### Generalization Across Subject Cohorts (gen_65 — best overall, per fold)
 
 | Fold | Macro-F1 |
 |---:|---:|
-| 1 | 0.451 |
-| 2 | 0.478 |
-| 3 | 0.547 |
-| 4 | **0.720** |
-| 5 | 0.490 |
-| 6 | 0.495 |
+| 1 | 0.457 |
+| 2 | 0.482 |
+| 3 | 0.560 |
+| 4 | **0.878** |
+| 5 | 0.419 |
+| 6 | 0.488 |
 
-High variance across folds (0.45–0.72) suggests the model hasn't fully generalized across cohort-specific gait styles. Fold 4 subject demographics or capture conditions may differ. Improving folds 1 and 2 is the key target for Task 2.
+High variance across folds (0.42–0.88) indicates cohort-specific variation. Fold 4 is an outlier; improving folds 1, 2, and 5 is the key target for Task 2.
 
 ### Task v2 Smoke Test (3 generations, local)
 
@@ -119,7 +130,7 @@ High variance across folds (0.45–0.72) suggests the model hasn't fully general
 | initial (best of 3 runs) | 0.596 | 0.510 |
 | gen_2 | **0.608** | 0.503 |
 
-The v2 seed is a stronger starting point than v1. Gen_2 already approaches Task 1's best result after just 2 generations.
+The v2 seed is a stronger starting point than v1. Gen_2 already approaches Task 1's early peak after just 2 generations.
 
 ---
 
@@ -131,15 +142,14 @@ ShinkaEvolveCarePD/
 │   ├── initial.py          # Baseline genome (seed program)
 │   ├── evaluate.py         # Standalone eval harness (no shinka imports)
 │   ├── shinka_task.yaml    # Evolution config (models, budget, islands)
-│   └── leaderboard.csv     # Per-genome results log
+│   └── leaderboard.csv     # Per-genome results log (59 evaluated genomes)
 ├── care_pd_task_v2/        # Task 2 — improved seed architecture
 │   ├── initial.py
 │   ├── evaluate.py
 │   └── shinka_task.yaml
 ├── results/
-│   └── care_pd_full/       # Full RunPod evolution run (28 genomes)
-├── docs/
-│   └── care_pd_task1_results.md  # Detailed results analysis
+│   └── care_pd_full/       # Full RunPod evolution run (~90 genomes)
+├── care_pd_task1_results.md  # Detailed Task 1 results analysis
 ├── runpod_startup.sh       # Authoritative RunPod pod startup script
 └── CLAUDE.md               # Claude Code project instructions
 ```
@@ -276,7 +286,7 @@ This project is grounded in the ShinkaEvolve paper (Sakana AI). Key design decis
 
 - **Starting simple**: The seed genome is intentionally minimal — a frozen MotionCLIP encoder + thin MLP — to give the evolutionary search maximum room for novelty.
 - **Dual fitness as Pareto front**: Macro-F1 (clinical prediction) and MPJPE (motion reconstruction) are logged separately, not combined into a single weighted score, to reveal the convex hull of trade-offs.
-- **Sample efficiency**: ~30 GPU evaluations achieved a 12% improvement. This compares favorably to grid search or NAS approaches requiring thousands of evaluations.
+- **Sample efficiency**: ~59 successful GPU evaluations achieved a 16% improvement. This compares favorably to grid search or NAS approaches requiring thousands of evaluations.
 - **The "problem-problem"**: The fitness function itself (Macro-F1 on BMCLab fold 4) may be overly narrow. Future work should consider multi-cohort evaluation and proxy metrics that are easier to optimize early.
 
 For a deep dive on how ShinkaEvolve works, see `Research/MLST - Robert Lange - Sakana AI - Transcript.md`.
