@@ -29,12 +29,16 @@ HEADERS = {
 REST_BASE = "https://rest.runpod.io/v1"
 
 # ── GPU priority lists ────────────────────────────────────────────────────────
-GPU_PRIORITY_BIG = [        # --big flag: A100 / A6000 first
+GPU_PRIORITY_BIG = [        # --big flag: A100/H100/L40S first, wide fallback
     "NVIDIA A100 80GB PCIe",
     "NVIDIA A100-SXM4-80GB",
-    "NVIDIA A100-SXM4-40GB",
-    "NVIDIA A100 PCIe",
+    "NVIDIA H100 80GB HBM3",
+    "NVIDIA H100 PCIe",
     "NVIDIA RTX A6000",
+    "NVIDIA L40S",
+    "NVIDIA L40",
+    "NVIDIA A40",
+    "NVIDIA RTX 6000 Ada Generation",
     "NVIDIA GeForce RTX 4090",
     "NVIDIA RTX A5000",
 ]
@@ -64,6 +68,8 @@ def _get(path, **kwargs):
 
 def _post(path, body):
     r = requests.post(f"{REST_BASE}/{path}", headers=HEADERS, json=body)
+    if not r.ok:
+        print(f"[error] {r.status_code}: {r.text}")
     r.raise_for_status()
     return r.json()
 
@@ -114,6 +120,7 @@ def launch_pod(
         # Secrets — must be created at console.runpod.io/user/secrets first
         "ANTHROPIC_API_KEY":  "{{ RUNPOD_SECRET_ANTHROPIC_API_KEY }}",
         "GEMINI_API_KEY":     "{{ RUNPOD_SECRET_GEMINI_API_KEY }}",
+        "OPENROUTER_API_KEY": os.environ.get("OPENROUTER_API_KEY", ""),
         "HF_TOKEN":           "{{ RUNPOD_SECRET_HF_TOKEN }}",
         "GITHUB_TOKEN":       "{{ RUNPOD_SECRET_GITHUB_TOKEN }}",
         "GITHUB_EMAIL":       "{{ RUNPOD_SECRET_GITHUB_EMAIL }}",
@@ -139,6 +146,7 @@ def launch_pod(
         "gpuTypePriority":    "custom",  # try in order
         "containerDiskInGb":  20,
         "networkVolumeId":    volume_id,
+        "dataCenterIds":      ["US-TX-3"],  # pin to volume's datacenter
         "volumeMountPath":    "/workspace",
         "ports":              ["22/tcp", "8080/http", "8888/http"],
         "env":                env,

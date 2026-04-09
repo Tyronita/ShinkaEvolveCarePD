@@ -53,8 +53,8 @@ evo_config:
   patch_types: ["diff", "full", "cross"]
   patch_type_probs: [0.55, 0.30, 0.15]
 
-  num_generations: 30
-  max_api_costs: 5.0
+  num_generations: 200
+  max_api_costs: 12.0
 
   max_patch_resamples: 3
   max_patch_attempts: 2
@@ -63,12 +63,12 @@ evo_config:
   job_type: local
   language: python
 
-  # LLM model pool — verified working (no -preview suffix on OpenRouter models!)
+  # LLM model pool — budget-conscious: OpenRouter cheap models + Gemini direct
+  # No Claude (too expensive). OpenRouter $12 budget, Gemini via direct API key.
   llm_models:
-    - "claude-opus-4-6"                               # primary mutator
-    - "claude-sonnet-4-6"                             # fast secondary
-    - "gemini-2.5-pro"      # strong reasoner
-    - "gemini-2.5-flash"          # diverse + cheap
+    - "openrouter/qwen/qwen3-235b-a22b"       # proven working in run1, very cheap
+    - "openrouter/deepseek/deepseek-chat-v3-5" # strong coder, cheap
+    - "gemini-2.5-flash"                       # diverse + fast, direct API
 
   llm_kwargs:
     temperatures: [0.0, 0.5, 1.0]
@@ -80,7 +80,7 @@ evo_config:
     cost_aware_coef: 0.6
 
   meta_rec_interval: 8
-  meta_llm_models: ["claude-sonnet-4-6"]
+  meta_llm_models: ["gemini-2.5-flash"]  # was claude-sonnet — too expensive
   meta_llm_kwargs:
     temperatures: [0.0]
     max_tokens: 16384
@@ -91,7 +91,7 @@ evo_config:
     temperatures: [0.0]
 
   # Gemini embedding for code-similarity dedup (non-fatal if unavailable)
-  embedding_model: "gemini-embedding-exp-03-07"
+  embedding_model: "gemini-embedding-004"
   code_embed_sim_threshold: 0.99
 
   enable_controlled_oversubscription: true
